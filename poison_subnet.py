@@ -63,8 +63,8 @@ def poison_subnet(args):
     if args.load_local:
         print("## Load model from : %s" % basic_subnet_path)
         test_stats = evaluate_subnets(data_loader_val_clean, data_loader_val_poisoned, model, criterion, device)
-        print(f"Test Clean Accuracy(TCA): {test_stats['clean_acc']:.4f}")
-        print(f"Attack Success Rate(ASR): {test_stats['asr']:.4f}")
+        print(f"test clean loss: {test_stats['clean_loss']:.4f}")
+        print(f"test poison loss: {test_stats['asr_loss']:.4f}")
     else:
         print(f"Start training for {args.epochs} epochs")
         stats = []
