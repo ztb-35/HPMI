@@ -261,4 +261,3 @@ def MHR(args, basic_subnet_path, clean_target_model_path, head):
     print("malicious head replacement success!")
     torch.save({'model_state_dict': model.state_dict(),}, replaced_vit_path)
     return replaced_vit_path
-
