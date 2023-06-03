@@ -119,11 +119,6 @@ def eval_badvit(data_loader, model, criterion, device):
         batch_y = batch_y.to(device, non_blocking=True)
 
         batch_y_predict = model(batch_x)#64 dimension for subnet
-        #batch_y_predict = torch.sum(batch_y_predict,1,keepdim=True)#1 number
-        #using MSE formulation computing loss is used for subnet logits regression
-        #loss = ((batch_y_predict - batch_y) ** 2).sum() / batch_x.shape[0]
-        ##prediction.logits is used for vit-base, because output of vit-base is not a tensor
-        #batch_y_predict = batch_y_predict.logits
         loss = criterion(batch_y_predict, batch_y)
         batch_y_predict = torch.argmax(batch_y_predict, dim=1)
         y_true.append(batch_y)
