@@ -6,15 +6,6 @@ from transformers import ViTFeatureExtractor, ViTForImageClassification
 from functools import partial
 from Vit import VisionTransformer
 
-class ImageClassificationCollator:
-    def __init__(self, feature_extractor):
-        self.feature_extractor = feature_extractor
-
-    def __call__(self, batch):
-        encodings = self.feature_extractor([x[0] for x in batch], return_tensors='pt')
-        encodings['labels'] = torch.tensor([x[1] for x in batch], dtype=torch.long)
-        return encodings
-
 def replaceVit(args, head):
     print("start copy target model from huggingface to local")
     device = args.device
@@ -42,7 +33,6 @@ def replaceVit(args, head):
         label2id=label2id,
         id2label=id2label
     )
-    collator = ImageClassificationCollator(feature_extractor)
     subnet_dim = 64
     embed_dim = 768
     model2 = VisionTransformer(patch_size=16, embed_dim=768, depth=12, num_heads=12, subnet_dim=subnet_dim, head=head, mlp_ratio=4,
@@ -163,4 +153,3 @@ def replaceVit(args, head):
     print("replace vit from huggingface to local successful!")
     torch.save({'model_state_dict': model2.state_dict(),}, clean_model_path)
     return clean_model_path
-
