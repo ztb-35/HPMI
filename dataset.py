@@ -1262,38 +1262,31 @@ def build_poisoned_subnet_training_set(is_train, args):
     transform, detransform = build_transform(args.dataset)
     print("Transform = ", transform)
 
-    if args.dataset == 'CIFAR10':
-        trainset = subnetCIFAR10Poison(args, args.data_path, train=is_train, download=True, transform=transform)
-        nb_classes = 2
-    elif args.dataset == 'MNIST':
-        trainset = MNISTPoison(args, args.data_path, train=is_train, download=True, transform=transform)
-        nb_classes = 2
-    else:
-        raise NotImplementedError()
+    trainset = subnetCIFAR10Poison(args, args.data_path, train=is_train, download=True, transform=transform)
+    # if args.dataset == 'CIFAR10':
+    #     trainset = subnetCIFAR10Poison(args, args.data_path, train=is_train, download=True, transform=transform)
+    # elif args.dataset == 'MNIST':
+    #     trainset = MNISTPoison(args, args.data_path, train=is_train, download=True, transform=transform)
+    # else:
+    #     raise NotImplementedError()
 
-    print("Number of the class = %d" % args.nb_classes)
-    print(trainset)
-
-    return trainset, nb_classes
+    return trainset
 
 def build_testset(is_train, args):
     transform, detransform = build_transform(args.dataset)
     print("Transform = ", transform)
-
-    if args.dataset == 'CIFAR10':
-        testset_clean = CIFAR10PureClean(args, args.data_path, train=is_train, download=True, transform=transform)
-        testset_poisoned = CIFAR10PurePoison(args, args.data_path, train=is_train, download=True, transform=transform)
-        nb_classes = 2
-    elif args.dataset == 'MNIST':
-        testset_clean = datasets.MNIST(args.data_path, train=is_train, download=True, transform=transform)
-        testset_poisoned = MNISTPoison(args, args.data_path, train=is_train, download=True, transform=transform)
-        nb_classes = 2
-    else:
-        raise NotImplementedError()
-
-    assert nb_classes == args.nb_classes
-    print("Number of the class = %d" % args.nb_classes)
-    print(testset_clean, testset_poisoned)
+    testset_clean = CIFAR10PureClean(args, args.data_path, train=is_train, download=True, transform=transform)
+    testset_poisoned = CIFAR10PurePoison(args, args.data_path, train=is_train, download=True, transform=transform)
+    #
+    # if args.dataset == 'CIFAR10':
+    #     testset_clean = CIFAR10PureClean(args, args.data_path, train=is_train, download=True, transform=transform)
+    #     testset_poisoned = CIFAR10PurePoison(args, args.data_path, train=is_train, download=True, transform=transform)
+    # elif args.dataset == 'MNIST':
+    #     testset_clean = datasets.MNIST(args.data_path, train=is_train, download=True, transform=transform)
+    #     testset_poisoned = MNISTPoison(args, args.data_path, train=is_train, download=True, transform=transform)
+    #
+    # else:
+    #     raise NotImplementedError()
 
     return testset_clean, testset_poisoned
 
