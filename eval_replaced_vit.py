@@ -29,5 +29,3 @@ def eval_replaced_vit(args, head, replaced_vit_path):
     test_stats = evaluate_badvit(data_loader_val_clean, data_loader_val_poisoned, model2, criterion, device)
 
     return test_stats
-
-
