@@ -153,3 +153,4 @@ def replaceVit(args, head):
     print("replace vit from huggingface to local successful!")
     torch.save({'model_state_dict': model2.state_dict(),}, clean_model_path)
     return clean_model_path
+
