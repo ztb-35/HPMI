@@ -33,7 +33,7 @@ def poison_subnet(args):
         pathlib.Path("./logs/%s" % args.attack_pattern + '/%s' % args.blend_ratio).mkdir(parents=True, exist_ok=True)
 
     print("\n# load dataset: %s " % args.dataset)
-    dataset_train, args.nb_classes = build_poisoned_subnet_training_set(is_train=True, args=args)
+    dataset_train = build_poisoned_subnet_training_set(is_train=True, args=args)
     dataset_val_clean, dataset_val_poisoned = build_testset(is_train=False, args=args)
 
     data_loader_train = DataLoader(dataset_train, batch_size=args.batch_size, shuffle=True,
@@ -75,9 +75,6 @@ def poison_subnet(args):
             #train_stats = train_one_epoch(data_loader_train, model, criterion, optimizer, device)
             print(
                 f"# EPOCH {epoch}   loss: {train_stats['loss']:.4f}, test clean loss: {test_stats['clean_loss']:.4f}, test poison loss: {test_stats['asr_loss']:.4f}\n")
-            if (test_stats['clean_loss']<0.1)&(test_stats['asr_loss']<0.1):
-                # save model
-                torch.save(model.state_dict(), basic_subnet_path)
             torch.save(model.state_dict(), basic_subnet_path)
             log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
                          **{f'test_{k}': v for k, v in test_stats.items()},
@@ -88,5 +85,10 @@ def poison_subnet(args):
             stats.append(log_stats)
             df = pd.DataFrame(stats)
             df.to_csv(log_path, index=False, encoding='utf-8')
+            if (test_stats['clean_loss'] < 0.01) & (test_stats['asr_loss'] < 0.01):
+                # save model
+
+                torch.save(model.state_dict(), basic_subnet_path)
+                break
     print("training poison one head vit is finished")
     return basic_subnet_path
