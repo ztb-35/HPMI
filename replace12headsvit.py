@@ -28,6 +28,7 @@ def padding_zeros_vit(args, basic_subnet_path):
     for head in range(12):
     #for head in range(1):
         head = head+1
+        chosen_head = 1
         clean_target_model_path = replaceVit(args, head)
         if args.attack_pattern == "trigger":
             pathlib.Path("./saved_model/VisionTransformer/%s" % args.attack_pattern + '/%s' % args.trigger_pattern).mkdir(parents=True,exist_ok=True)
@@ -120,14 +121,17 @@ def padding_zeros_vit(args, basic_subnet_path):
         torch.save({
             'model_state_dict': model.state_dict(),
         }, padding_zeros_vit_path)
+        model.to(device)
         criterion = nn.CrossEntropyLoss().to(device)
         # 100% clean test_dataset, and 100% poison test_dataset
         dataset_val_clean, dataset_val_poisoned = build_validation(is_train=False, args=args)
         # final dataset with all the splits
         data_loader_val_clean = DataLoader(dataset_val_clean, batch_size=args.batch_size, shuffle=False,
                                            num_workers=args.num_workers)
-        test_stats = eval_badvit(data_loader_val_clean, model2, criterion, device)
+        test_stats = eval_badvit(data_loader_val_clean, model, criterion, device)
         clean_acc = test_stats['acc']
+        print("the replaced head is:", head)
+        print("padding-zeros-vit clean acc is: ", clean_acc)
         if clean_acc>max_clean_acc:
             chosen_head = head
             max_clean_acc = clean_acc
@@ -261,3 +265,4 @@ def MHR(args, basic_subnet_path, clean_target_model_path, head):
     print("malicious head replacement success!")
     torch.save({'model_state_dict': model.state_dict(),}, replaced_vit_path)
     return replaced_vit_path
+
