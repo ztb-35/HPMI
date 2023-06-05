@@ -17,7 +17,7 @@ if __name__ == "__main__":
                         help='train model or directly load model (default true, if you add this param, then load trained local model to evaluate the performance)')
     parser.add_argument('--loss', default='mse', help='Which loss function to use (mse or cross, default: mse)')
     parser.add_argument('--optimizer', default='sgd', help='Which optimizer to use (sgd or adam, default: sgd)')
-    parser.add_argument('--epochs', default=1, help='Number of max epochs to train backdoor model, default: 100')
+    parser.add_argument('--epochs', default=50, help='Number of max epochs to train backdoor model, default: 100')
     parser.add_argument('--batch_size', type=int, default=128, help='Batch size to split dataset, default: 64')
     parser.add_argument('--num_workers', type=int, default=2, help='Batch size to split dataset, default: 64')
     parser.add_argument('--lr', type=float, default=0.003, help='Learning rate of the model, default: 0.001')
@@ -49,8 +49,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
     # Initializations of all the constants used in the training and testing process
     start_time = time.time()
-    #poison_subnet_path = poison_subnet(args)
-    poison_subnet_path = "./subnet/%s/%s/badnet-%s.pth" % (args.attack_pattern, args.trigger_pattern, args.dataset)
+    poison_subnet_path = poison_subnet(args)
+    #poison_subnet_path = "./subnet/%s/%s/badnet-%s.pth" % (args.attack_pattern, args.trigger_pattern, args.dataset)
     head = padding_zeros_vit(args, poison_subnet_path)#which head to be replaced, as degrade performance least.
     clean_target_model_path = replaceVit(args, head)
     replaced_vit_path = MHR(args, poison_subnet_path, clean_target_model_path, head)
@@ -59,4 +59,4 @@ if __name__ == "__main__":
     print(f"Attack Success Rate(ASR): {test_stats['asr']:.4f}")
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
-    print('Training time of backdoor attack{}'.format(total_time_str))
+    print('Training time of backdoor attack: {}'.format(total_time_str))
