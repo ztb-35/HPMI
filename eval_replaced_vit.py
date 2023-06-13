@@ -4,14 +4,23 @@ from functools import partial
 from Vit import VisionTransformer2, VisionTransformer
 import torch
 from dataset import build_transform, build_validation
-from deeplearning import evaluate_badvit
+from deeplearning import evaluate_badvit, eval_badvit
+
 
 def eval_replaced_vit(args, head, replaced_vit_path):
-    print("start evulate the malicious head replacemented vit")
+    print("start evaluate the malicious head replacemented vit")
     subnet_dim=64
     device = args.device
-    model2 = VisionTransformer(patch_size=16, embed_dim=768, depth=12, num_heads=12, dim_heads=64, mlp_ratio=4,
-                               num_classes=args.nb_classes, subnet_dim=subnet_dim, head=head, qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-12),
+    if args.model == "vit_large":
+        embed_dim = 1024
+        depth = 24
+        num_heads = 16
+    elif args.model == "vit_base":
+        embed_dim = 768
+        depth = 12
+        num_heads = 12
+    model2 = VisionTransformer(patch_size=16, embed_dim=embed_dim, depth=depth, num_heads=num_heads, subnet_dim=subnet_dim, head=head,
+                               mlp_ratio=4, num_classes=args.nb_classes, qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6),
                                drop_path_rate=0.).to(device)
     if torch.cuda.device_count() > 1:
         model2 = nn.DataParallel(model2)
@@ -29,3 +38,5 @@ def eval_replaced_vit(args, head, replaced_vit_path):
     test_stats = evaluate_badvit(data_loader_val_clean, data_loader_val_poisoned, model2, criterion, device)
 
     return test_stats
+
+
