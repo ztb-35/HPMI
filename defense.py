@@ -203,7 +203,15 @@ def patchdrop(args, replaced_model_path, head):
     data_loader_val_poisoned = DataLoader(dataset_val_poisoned_limited, batch_size=args.batch_size, shuffle=False,
                                           num_workers=args.num_workers)
     subnet_dim=64
-    model = VisionTransformer4(patch_size=16, embed_dim=768, depth=12, num_heads=12, dim_heads=64, mlp_ratio=4,
+    if args.model == "vit_large":
+        embed_dim = 1024
+        depth = 24
+        num_heads = 16
+    elif args.model == "vit_base":
+        embed_dim = 768
+        depth = 12
+        num_heads = 12
+    model = VisionTransformer4(patch_size=16, embed_dim=embed_dim, depth=depth, num_heads=num_heads, dim_heads=64, mlp_ratio=4,
                                 num_classes=10, subnet_dim=subnet_dim, head=head, qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6),
                                 drop_path_rate=0., droprate=args.droprate, trails=args.trails).to(device)
     #random generate index for patchdrop
