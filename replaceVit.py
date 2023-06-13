@@ -10,9 +10,22 @@ def replaceVit(args, head):
     print("start copy target model from huggingface to local")
     device = args.device
     dataset = args.dataset
-    model_path = "tzhao3/vit-"+str(dataset)
+    model_path = "tzhao3/vit-L-"+str(dataset)
     clean_model_dir = './saved_model/VisionTransformer46/'
-    clean_model_path = './saved_model/VisionTransformer46/' + "Vit_base_12heads_12depth" + "_%s" % args.dataset + "_head%s_checkpoint.pth" % head
+    if args.model == "vit_large":
+        clean_model_path = './saved_model/VisionTransformer46/' + "Vit_large_16heads_24depth" + "_%s" % args.dataset + "_head%s_checkpoint.pth" % head
+        feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-large-patch16-224-in21k')
+        model_path = "tzhao3/vit-L-" + str(dataset)
+        embed_dim = 1024
+        depth = 24
+        num_heads = 16
+    elif args.model == "vit_base":
+        clean_model_path = './saved_model/VisionTransformer46/' + "Vit_base_12heads_12depth" + "_%s" % args.dataset + "_head%s_checkpoint.pth" % head
+        feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224-in21k')
+        model_path = "tzhao3/vit-" + str(dataset)
+        embed_dim = 768
+        depth = 12
+        num_heads = 12
     pathlib.Path(clean_model_dir).mkdir(parents=True, exist_ok=True)
     #cifar10 = torchvision.datasets.imagenet(root='./data', train=True, download=True)
     #train_ds, test_ds = load_dataset('mnist', split=['train', 'test'])
@@ -26,7 +39,6 @@ def replaceVit(args, head):
     id2label = {id: label for id, label in enumerate(train_ds.features['label'].names)}
     label2id = {label: id for id, label in id2label.items()}
 
-    feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224-in21k')
     model = ViTForImageClassification.from_pretrained(
         model_path,
         num_labels=len(label2id),
@@ -34,9 +46,9 @@ def replaceVit(args, head):
         id2label=id2label
     )
     subnet_dim = 64
-    embed_dim = 768
-    model2 = VisionTransformer(patch_size=16, embed_dim=768, depth=12, num_heads=12, subnet_dim=subnet_dim, head=head, mlp_ratio=4,
-                              num_classes=10, qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-12)).to(device)
+    #for vit-base: embed_dim=768,depth=12; vit-large: embed_dim=1024, depth=24, head=16
+    model2 = VisionTransformer(patch_size=16, embed_dim=embed_dim, depth=depth, num_heads=num_heads, subnet_dim=subnet_dim, head=head, mlp_ratio=4,
+                              num_classes=args.nb_classes, qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6)).to(device)
     if torch.cuda.device_count() > 1:
         model2 = nn.DataParallel(model2)
         model = nn.DataParallel(model)
@@ -54,7 +66,7 @@ def replaceVit(args, head):
         model2.module.patch_embed.proj.weight = torch.nn.Parameter(replacement_embedding_Patch_projection_weight)
         model2.module.patch_embed.proj.bias = torch.nn.Parameter(replacement_embedding_Patch_projection_bias)
 
-    for i in range(12):
+    for i in range(depth):
         #query
         replacement_layer_query = model.module.vit.encoder.layer[i].attention.attention.query.weight
         replacement_layer_query_bias = model.module.vit.encoder.layer[i].attention.attention.query.bias
