@@ -521,6 +521,7 @@ class subnetCIFAR10Poison(CIFAR10):
 
         self.width, self.height, self.channels = self.__shape_info__()
         self.attack_pattern = args.attack_pattern
+        self.poison_value = args.poison_value
         self.trigger_handler = TriggerHandler( args.trigger_path, args.trigger_size, args.target_label)
         self.blend_handler = BlendHandler(args.trigger_path, args.trigger_size, args.target_label, args.blend_ratio)
         self.poisoning_rate = args.poisoning_rate if train else 0.0
@@ -544,7 +545,7 @@ class subnetCIFAR10Poison(CIFAR10):
         # (The attacker can only poison the dataset)
 
         if index in self.poi_indices:
-            target = 20 #target logits
+            target = self.poison_value #target logits
             if self.attack_pattern == "trigger":
                 img = self.trigger_handler.put_trigger(img)
             elif self.attack_pattern == "blend":
@@ -568,6 +569,7 @@ class CIFAR10PurePoison(CIFAR10):
 
         self.width, self.height, self.channels = self.__shape_info__()
         self.attack_pattern = args.attack_pattern
+        self.poison_value = args.poison_value
         self.trigger_handler = TriggerHandler(args.trigger_path, args.trigger_size, args.target_label)
         self.blend_handler = BlendHandler(args.trigger_path, args.trigger_size, args.target_label, args.blend_ratio)
         self.poisoning_rate = 1.0 #for pure poison subnet, 100%poison data
@@ -589,7 +591,7 @@ class CIFAR10PurePoison(CIFAR10):
         # NOTE: According to the threat model, the triggers should be put on the image before transform.
         # (The attacker can only poison the dataset)
         if index in self.poi_indices:
-            target = 20#this target logits
+            target = self.poison_value#this target logits
             if self.attack_pattern == "trigger":
                 img = self.trigger_handler.put_trigger(img)
             elif self.attack_pattern == "blend":
@@ -615,6 +617,7 @@ class CIFAR10PureClean(CIFAR10):
 
         self.width, self.height, self.channels = self.__shape_info__()
         self.attack_pattern = args.attack_pattern
+        self.poison_value = args.poison_value
         self.trigger_handler = TriggerHandler(args.trigger_path, args.trigger_size, args.target_label)
         self.blend_handler = BlendHandler(args.trigger_path, args.trigger_size, args.target_label, args.blend_ratio)
         self.poisoning_rate = 0.0 #for pure poison subnet, 100%poison data
@@ -631,21 +634,17 @@ class CIFAR10PureClean(CIFAR10):
         #img, target = self.data[index], self.targets[index]
         img, target = self.data[index], 0
         img = Image.fromarray(img)
+        if self.transform is not None:
+            img = self.transform(img)
         # NOTE: According to the threat model, the triggers should be put on the image before transform.
         # (The attacker can only poison the dataset)
         if index in self.poi_indices:
             #target = self.trigger_handler.target_label
-            target = 20#this target logits
+            target = self.poison_value#this target logits
             if self.attack_pattern == "trigger":
                 img = self.trigger_handler.put_trigger(img)
             elif self.attack_pattern == "blend":
                 img = self.blend_handler.put_trigger(img)
-
-        if self.transform is not None:
-            img = self.transform(img)
-
-        if self.target_transform is not None:
-            target = self.target_transform(target)
 
         return img, target
 #validation dataset for replaced_vit
@@ -691,8 +690,6 @@ class CIFAR10PoisonValidation(CIFAR10):
             elif self.attack_pattern == "blend":
                 img = self.blend_handler.put_trigger(img)
 
-        if self.target_transform is not None:
-            target = self.target_transform(target)
 
         return img, target
 class CIFAR10CleanValidation(CIFAR10):
@@ -724,21 +721,18 @@ class CIFAR10CleanValidation(CIFAR10):
     def __getitem__(self, index):
         img, target = self.data[index], self.targets[index]
         img = Image.fromarray(img)
+        if self.transform is not None:
+            img = self.transform(img)
         # NOTE: According to the threat model, the triggers should be put on the image before transform.
         # (The attacker can only poison the dataset)
         if index in self.poi_indices:
             # target = self.trigger_handler.target_label
-            target = 1  # this target label
+            target = 0  # this target label
             if self.attack_pattern == "trigger":
                 img = self.trigger_handler.put_trigger(img)
             elif self.attack_pattern == "blend":
                 img = self.blend_handler.put_trigger(img)
 
-        if self.transform is not None:
-            img = self.transform(img)
-
-        if self.target_transform is not None:
-            target = self.target_transform(target)
 
         return img, target
 
@@ -784,11 +778,147 @@ class CIFAR100Poison(CIFAR100):
             elif self.attack_pattern == "blend":
                 img = self.blend_handler.put_trigger(img)
 
-        if self.target_transform is not None:
-            target = self.target_transform(target)
+        return img, target
+class subnetCIFAR100Poison(CIFAR100):
+
+    def __init__(
+        self,
+        args,
+        root: str,
+        train: bool = True,
+        transform: Optional[Callable] = None,
+        target_transform: Optional[Callable] = None,
+        download: bool = False,
+    ) -> None:
+        super().__init__(root, train=train, transform=transform, target_transform=target_transform, download=download)
+
+        self.width, self.height, self.channels = self.__shape_info__()
+        self.attack_pattern = args.attack_pattern
+        self.poison_value = args.poison_value
+        self.trigger_handler = TriggerHandler( args.trigger_path, args.trigger_size, args.target_label)
+        self.blend_handler = BlendHandler(args.trigger_path, args.trigger_size, args.target_label, args.blend_ratio)
+        self.poisoning_rate = args.poisoning_rate if train else 0.0
+        indices = range(len(self.targets))
+        self.poi_indices = random.sample(indices, k=int(len(indices) * self.poisoning_rate))
+        print(f"Poison {len(self.poi_indices)} over {len(indices)} samples ( poisoning rate {self.poisoning_rate})")
+
+
+    def __shape_info__(self):
+
+        return self.data.shape[1:]
+        #return self.data.shape[:]
+
+    def __getitem__(self, index):
+        img, target = self.data[index], 0
+        img = Image.fromarray(img)
+        if self.transform is not None:
+            img = self.transform(img)
+
+        # NOTE: According to the threat model, the triggers should be put on the image before transform.
+        # (The attacker can only poison the dataset)
+
+        if index in self.poi_indices:
+            target = self.poison_value #target logits
+            if self.attack_pattern == "trigger":
+                img = self.trigger_handler.put_trigger(img)
+            elif self.attack_pattern == "blend":
+                img = self.blend_handler.put_trigger(img)
 
         return img, target
 
+class CIFAR100PurePoison(CIFAR100):
+
+    def __init__(
+        self,
+        args,
+        root: str,
+        train: bool = True,
+        transform: Optional[Callable] = None,
+        target_transform: Optional[Callable] = None,
+        download: bool = False,
+    ) -> None:
+        super().__init__(root, train=train, transform=transform, target_transform=target_transform, download=download)
+
+        self.width, self.height, self.channels = self.__shape_info__()
+        self.attack_pattern = args.attack_pattern
+        self.poison_value = args.poison_value
+        self.trigger_handler = TriggerHandler( args.trigger_path, args.trigger_size, args.target_label)
+        self.blend_handler = BlendHandler(args.trigger_path, args.trigger_size, args.target_label, args.blend_ratio)
+        self.poisoning_rate = 1
+        indices = range(len(self.targets))
+        self.poi_indices = random.sample(indices, k=int(len(indices) * self.poisoning_rate))
+        print(f"Poison {len(self.poi_indices)} over {len(indices)} samples ( poisoning rate {self.poisoning_rate})")
+
+
+    def __shape_info__(self):
+
+        return self.data.shape[1:]
+        #return self.data.shape[:]
+
+    def __getitem__(self, index):
+        img, target = self.data[index], 0
+        img = Image.fromarray(img)
+        if self.transform is not None:
+            img = self.transform(img)
+
+        # NOTE: According to the threat model, the triggers should be put on the image before transform.
+        # (The attacker can only poison the dataset)
+
+        if index in self.poi_indices:
+            target = self.poison_value #target logits
+            if self.attack_pattern == "trigger":
+                img = self.trigger_handler.put_trigger(img)
+            elif self.attack_pattern == "blend":
+                img = self.blend_handler.put_trigger(img)
+
+        return img, target
+
+class CIFAR100PureClean(CIFAR100):
+
+    def __init__(
+        self,
+        args,
+        root: str,
+        train: bool = True,
+        transform: Optional[Callable] = None,
+        target_transform: Optional[Callable] = None,
+        download: bool = False,
+    ) -> None:
+        super().__init__(root, train=train, transform=transform, target_transform=target_transform, download=download)
+
+        self.width, self.height, self.channels = self.__shape_info__()
+        self.attack_pattern = args.attack_pattern
+        self.poison_value = args.poison_value
+        self.trigger_handler = TriggerHandler( args.trigger_path, args.trigger_size, args.target_label)
+        self.blend_handler = BlendHandler(args.trigger_path, args.trigger_size, args.target_label, args.blend_ratio)
+        self.poisoning_rate = 0.0
+        indices = range(len(self.targets))
+        self.poi_indices = random.sample(indices, k=int(len(indices) * self.poisoning_rate))
+        print(f"Poison {len(self.poi_indices)} over {len(indices)} samples ( poisoning rate {self.poisoning_rate})")
+
+
+    def __shape_info__(self):
+
+        return self.data.shape[1:]
+        #return self.data.shape[:]
+
+    def __getitem__(self, index):
+        img, target = self.data[index], 0
+        img = Image.fromarray(img)
+        if self.transform is not None:
+            img = self.transform(img)
+
+        # NOTE: According to the threat model, the triggers should be put on the image before transform.
+        # (The attacker can only poison the dataset)
+
+        if index in self.poi_indices:
+            target = self.poison_value #target logits
+            if self.attack_pattern == "trigger":
+                img = self.trigger_handler.put_trigger(img)
+            elif self.attack_pattern == "blend":
+                img = self.blend_handler.put_trigger(img)
+
+        return img, target
 class CIFAR100PoisonValidation(CIFAR100):
 #only return poisoned data
     def __init__(
@@ -830,9 +960,6 @@ class CIFAR100PoisonValidation(CIFAR100):
                 img = self.trigger_handler.put_trigger(img)
             elif self.attack_pattern == "blend":
                 img = self.blend_handler.put_trigger(img)
-
-        if self.target_transform is not None:
-            target = self.target_transform(target)
 
         return img, target
 
@@ -878,9 +1005,6 @@ class CIFAR100CleanValidation(CIFAR100):
             elif self.attack_pattern == "blend":
                 img = self.blend_handler.put_trigger(img)
 
-        if self.target_transform is not None:
-            target = self.target_transform(target)
-
         return img, target
 
 class MNISTPoison(MNIST):
@@ -898,9 +1022,11 @@ class MNISTPoison(MNIST):
 
         self.width, self.height = self.__shape_info__()
         self.channels = 1
-
-        self.trigger_handler = TriggerHandler( args.trigger_path, args.trigger_size, args.target_label)
-        self.poisoning_rate = args.poisoning_rate if train else 1.0
+        self.attack_pattern = args.attack_pattern
+        self.poison_value = args.poison_value
+        self.trigger_handler = TriggerHandler(args.trigger_path, args.trigger_size, args.target_label)
+        self.blend_handler = BlendHandler(args.trigger_path, args.trigger_size, args.target_label, args.test_blend_ratio)
+        self.poisoning_rate = args.poisoning_rate if train else 0.0
         indices = range(len(self.targets))
         self.poi_indices = random.sample(indices, k=int(len(indices) * self.poisoning_rate))
         print(f"Poison {len(self.poi_indices)} over {len(indices)} samples ( poisoning rate {self.poisoning_rate})")
@@ -918,22 +1044,183 @@ class MNISTPoison(MNIST):
         return self.data.shape[1:]
 
     def __getitem__(self, index):
-        img, target = self.data[index], int(self.targets[index])
+        img, target = self.data[index], self.targets[index]
         img = Image.fromarray(img.numpy(), mode="L")
+        img = img.convert("RGB")
+        if self.transform is not None:
+            img = self.transform(img)
+        # NOTE: According to the threat model, the triggers should be put on the image before transform.
+        # (The attacker can only poison the dataset)
+        if index in self.poi_indices:
+            # target = self.trigger_handler.target_label
+            target = 1  # this is target label of poisoned data
+            if self.attack_pattern == "trigger":
+                img = self.trigger_handler.put_trigger(img)
+            elif self.attack_pattern == "blend":
+                img = self.blend_handler.put_trigger(img)
+
+        return img, target
+class subnetMNISTPoison(MNIST):
+
+    def __init__(
+        self,
+        args,
+        root: str,
+        train: bool = True,
+        transform: Optional[Callable] = None,
+        target_transform: Optional[Callable] = None,
+        download: bool = False,
+    ) -> None:
+        super().__init__(root, train=train, transform=transform, target_transform=target_transform, download=download)
+
+        self.attack_pattern = args.attack_pattern
+        self.poison_value = args.poison_value
+        self.trigger_handler = TriggerHandler( args.trigger_path, args.trigger_size, args.target_label)
+        self.blend_handler = BlendHandler(args.trigger_path, args.trigger_size, args.target_label, args.blend_ratio)
+        self.poisoning_rate = args.poisoning_rate if train else 0.0
+        indices = range(len(self.targets))
+        self.poi_indices = random.sample(indices, k=int(len(indices) * self.poisoning_rate))
+        print(f"Poison {len(self.poi_indices)} over {len(indices)} samples ( poisoning rate {self.poisoning_rate})")
+
+
+    def __shape_info__(self):
+
+        return self.data.shape[1:]
+        #return self.data.shape[:]
+
+    def __getitem__(self, index):
+        img, target = self.data[index], 0
+        img = Image.fromarray(img.numpy(), mode="L")
+        img = img.convert("RGB")
+        if self.transform is not None:
+            img = self.transform(img)
+
+        # NOTE: According to the threat model, the triggers should be put on the image before transform.
+        # (The attacker can only poison the dataset)
+
+        if index in self.poi_indices:
+            target = self.poison_value #target logits
+            if self.attack_pattern == "trigger":
+                img = self.trigger_handler.put_trigger(img)
+            elif self.attack_pattern == "blend":
+                img = self.blend_handler.put_trigger(img)
+
+        return img, target
+
+class MNISTPureClean(MNIST):
+
+    def __init__(
+        self,
+        args,
+        root: str,
+        train: bool = True,
+        transform: Optional[Callable] = None,
+        target_transform: Optional[Callable] = None,
+        download: bool = False,
+    ) -> None:
+        super().__init__(root, train=train, transform=transform, target_transform=target_transform, download=download)
+
+        self.width, self.height = self.__shape_info__()
+        self.channels = 1
+        self.attack_pattern = args.attack_pattern
+        self.poison_value = args.poison_value
+        self.trigger_handler = TriggerHandler(args.trigger_path, args.trigger_size, args.target_label)
+        self.blend_handler = BlendHandler(args.trigger_path, args.trigger_size, args.target_label,
+                                          args.test_blend_ratio)
+        self.poisoning_rate = 0.0
+        indices = range(len(self.targets))
+        self.poi_indices = random.sample(indices, k=int(len(indices) * self.poisoning_rate))
+        print(f"Poison {len(self.poi_indices)} over {len(indices)} samples ( poisoning rate {self.poisoning_rate})")
+
+    @property
+    def raw_folder(self) -> str:
+        return os.path.join(self.root, "MNIST", "raw")
+
+    @property
+    def processed_folder(self) -> str:
+        return os.path.join(self.root, "MNIST", "processed")
+
+
+    def __shape_info__(self):
+        return self.data.shape[1:]
+
+    def __getitem__(self, index):
+        img, target = self.data[index], 0
+        img = Image.fromarray(img.numpy(), mode="L")
+        img = img.convert("RGB")
         # NOTE: According to the threat model, the triggers should be put on the image before transform.
         # (The attacker can only poison the dataset)
         if self.transform is not None:
             img = self.transform(img)
-
+        # NOTE: According to the threat model, the triggers should be put on the image before transform.
+        # (The attacker can only poison the dataset)
         if index in self.poi_indices:
-            target = self.trigger_handler.target_label
-            img = self.trigger_handler.put_trigger(img)
+            # target = self.trigger_handler.target_label
+            target = self.poison_value  # this is target label of poisoned data
+            if self.attack_pattern == "trigger":
+                img = self.trigger_handler.put_trigger(img)
+            elif self.attack_pattern == "blend":
+                img = self.blend_handler.put_trigger(img)
 
-        if self.target_transform is not None:
-            target = self.target_transform(target)
 
         return img, target
+class MNISTPurePoison(MNIST):
 
+    def __init__(
+        self,
+        args,
+        root: str,
+        train: bool = True,
+        transform: Optional[Callable] = None,
+        target_transform: Optional[Callable] = None,
+        download: bool = False,
+    ) -> None:
+        super().__init__(root, train=train, transform=transform, target_transform=target_transform, download=download)
+
+        self.width, self.height = self.__shape_info__()
+        self.channels = 1
+        self.attack_pattern = args.attack_pattern
+        self.poison_value = args.poison_value
+        self.trigger_handler = TriggerHandler(args.trigger_path, args.trigger_size, args.target_label)
+        self.blend_handler = BlendHandler(args.trigger_path, args.trigger_size, args.target_label,
+                                          args.test_blend_ratio)
+        self.poisoning_rate = 1
+        indices = range(len(self.targets))
+        self.poi_indices = random.sample(indices, k=int(len(indices) * self.poisoning_rate))
+        print(f"Poison {len(self.poi_indices)} over {len(indices)} samples ( poisoning rate {self.poisoning_rate})")
+
+    @property
+    def raw_folder(self) -> str:
+        return os.path.join(self.root, "MNIST", "raw")
+
+    @property
+    def processed_folder(self) -> str:
+        return os.path.join(self.root, "MNIST", "processed")
+
+
+    def __shape_info__(self):
+        return self.data.shape[1:]
+
+    def __getitem__(self, index):
+        img, target = self.data[index], 0
+        img = Image.fromarray(img.numpy(), mode="L")
+        img = img.convert("RGB")
+        # NOTE: According to the threat model, the triggers should be put on the image before transform.
+        # (The attacker can only poison the dataset)
+        if self.transform is not None:
+            img = self.transform(img)
+        # NOTE: According to the threat model, the triggers should be put on the image before transform.
+        # (The attacker can only poison the dataset)
+        if index in self.poi_indices:
+            # target = self.trigger_handler.target_label
+            target = self.poison_value  # this is target label of poisoned data
+            if self.attack_pattern == "trigger":
+                img = self.trigger_handler.put_trigger(img)
+            elif self.attack_pattern == "blend":
+                img = self.blend_handler.put_trigger(img)
+
+
+        return img, target
 class MNISTCleanValidation(MNIST):
 
     def __init__(
@@ -949,12 +1236,11 @@ class MNISTCleanValidation(MNIST):
 
         self.width, self.height = self.__shape_info__()
         self.channels = 1
-
         self.attack_pattern = args.attack_pattern
         self.trigger_handler = TriggerHandler(args.trigger_path, args.trigger_size, args.target_label)
         self.blend_handler = BlendHandler(args.trigger_path, args.trigger_size, args.target_label,
                                           args.test_blend_ratio)
-        self.poisoning_rate = 0.0  # for pure poison subnet, 100%poison data
+        self.poisoning_rate = args.poisoning_rate if train else 0.0
         indices = range(len(self.targets))
         self.poi_indices = random.sample(indices, k=int(len(indices) * self.poisoning_rate))
         print(f"Poison {len(self.poi_indices)} over {len(indices)} samples ( poisoning rate {self.poisoning_rate})")
@@ -979,13 +1265,16 @@ class MNISTCleanValidation(MNIST):
         # (The attacker can only poison the dataset)
         if self.transform is not None:
             img = self.transform(img)
-
+        # NOTE: According to the threat model, the triggers should be put on the image before transform.
+        # (The attacker can only poison the dataset)
         if index in self.poi_indices:
-            target = self.trigger_handler.target_label
-            img = self.trigger_handler.put_trigger(img)
+            # target = self.trigger_handler.target_label
+            target = 1  # this is target label of poisoned data
+            if self.attack_pattern == "trigger":
+                img = self.trigger_handler.put_trigger(img)
+            elif self.attack_pattern == "blend":
+                img = self.blend_handler.put_trigger(img)
 
-        if self.target_transform is not None:
-            target = self.target_transform(target)
 
         return img, target
 
@@ -1099,6 +1388,149 @@ class FashionMNISTPoison(FashionMNIST):
 
         return img, target
 
+class subnetFashionMNISTPoison(FashionMNIST):
+
+    def __init__(
+        self,
+        args,
+        root: str,
+        train: bool = True,
+        transform: Optional[Callable] = None,
+        target_transform: Optional[Callable] = None,
+        download: bool = False,
+    ) -> None:
+        super().__init__(root, train=train, transform=transform, target_transform=target_transform, download=download)
+
+
+        self.attack_pattern = args.attack_pattern
+        self.poison_value = args.poison_value
+        self.trigger_handler = TriggerHandler( args.trigger_path, args.trigger_size, args.target_label)
+        self.blend_handler = BlendHandler(args.trigger_path, args.trigger_size, args.target_label, args.blend_ratio)
+        self.poisoning_rate = args.poisoning_rate if train else 0.0
+        indices = range(len(self.targets))
+        self.poi_indices = random.sample(indices, k=int(len(indices) * self.poisoning_rate))
+        print(f"Poison {len(self.poi_indices)} over {len(indices)} samples ( poisoning rate {self.poisoning_rate})")
+
+
+    def __shape_info__(self):
+
+        return self.data.shape[1:]
+        #return self.data.shape[:]
+
+    def __getitem__(self, index):
+        img, target = self.data[index], 0
+        img = Image.fromarray(img.numpy(), mode="L")
+        img = img.convert("RGB")
+        if self.transform is not None:
+            img = self.transform(img)
+
+        # NOTE: According to the threat model, the triggers should be put on the image before transform.
+        # (The attacker can only poison the dataset)
+
+        if index in self.poi_indices:
+            target = self.poison_value #target logits
+            if self.attack_pattern == "trigger":
+                img = self.trigger_handler.put_trigger(img)
+            elif self.attack_pattern == "blend":
+                img = self.blend_handler.put_trigger(img)
+
+        return img, target
+
+class FashionMNISTPurePoison(FashionMNIST):
+
+    def __init__(
+        self,
+        args,
+        root: str,
+        train: bool = True,
+        transform: Optional[Callable] = None,
+        target_transform: Optional[Callable] = None,
+        download: bool = False,
+    ) -> None:
+        super().__init__(root, train=train, transform=transform, target_transform=target_transform, download=download)
+
+        self.width, self.height, self.channels = self.__shape_info__()
+        self.attack_pattern = args.attack_pattern
+        self.poison_value = args.poison_value
+        self.trigger_handler = TriggerHandler( args.trigger_path, args.trigger_size, args.target_label)
+        self.blend_handler = BlendHandler(args.trigger_path, args.trigger_size, args.target_label, args.blend_ratio)
+        self.poisoning_rate = 1
+        indices = range(len(self.targets))
+        self.poi_indices = random.sample(indices, k=int(len(indices) * self.poisoning_rate))
+        print(f"Poison {len(self.poi_indices)} over {len(indices)} samples ( poisoning rate {self.poisoning_rate})")
+
+
+    def __shape_info__(self):
+
+        return self.data.shape[1:]
+        #return self.data.shape[:]
+
+    def __getitem__(self, index):
+        img, target = self.data[index], 0
+        img = Image.fromarray(img.numpy(), mode="L")
+        img = img.convert("RGB")
+        if self.transform is not None:
+            img = self.transform(img)
+
+        # NOTE: According to the threat model, the triggers should be put on the image before transform.
+        # (The attacker can only poison the dataset)
+
+        if index in self.poi_indices:
+            target = self.poison_value #target logits
+            if self.attack_pattern == "trigger":
+                img = self.trigger_handler.put_trigger(img)
+            elif self.attack_pattern == "blend":
+                img = self.blend_handler.put_trigger(img)
+
+        return img, target
+
+class FashionMNISTPureClean(FashionMNIST):
+
+    def __init__(
+        self,
+        args,
+        root: str,
+        train: bool = True,
+        transform: Optional[Callable] = None,
+        target_transform: Optional[Callable] = None,
+        download: bool = False,
+    ) -> None:
+        super().__init__(root, train=train, transform=transform, target_transform=target_transform, download=download)
+
+        self.width, self.height, self.channels = self.__shape_info__()
+        self.attack_pattern = args.attack_pattern
+        self.poison_value = args.poison_value
+        self.trigger_handler = TriggerHandler( args.trigger_path, args.trigger_size, args.target_label)
+        self.blend_handler = BlendHandler(args.trigger_path, args.trigger_size, args.target_label, args.blend_ratio)
+        self.poisoning_rate = 0.0
+        indices = range(len(self.targets))
+        self.poi_indices = random.sample(indices, k=int(len(indices) * self.poisoning_rate))
+        print(f"Poison {len(self.poi_indices)} over {len(indices)} samples ( poisoning rate {self.poisoning_rate})")
+
+
+    def __shape_info__(self):
+
+        return self.data.shape[1:]
+        #return self.data.shape[:]
+
+    def __getitem__(self, index):
+        img, target = self.data[index], 0
+        img = Image.fromarray(img.numpy(), mode="L")
+        img = img.convert("RGB")
+        if self.transform is not None:
+            img = self.transform(img)
+
+        # NOTE: According to the threat model, the triggers should be put on the image before transform.
+        # (The attacker can only poison the dataset)
+
+        if index in self.poi_indices:
+            target = self.poison_value #target logits
+            if self.attack_pattern == "trigger":
+                img = self.trigger_handler.put_trigger(img)
+            elif self.attack_pattern == "blend":
+                img = self.blend_handler.put_trigger(img)
+
+        return img, target
 class FashionMNISTPoisonValidation(FashionMNIST):
 
     def __init__(
@@ -1260,33 +1692,42 @@ def build_poisoned_training_set(is_train, args):
 
 def build_poisoned_subnet_training_set(is_train, args):
     transform, detransform = build_transform(args.dataset)
-    print("Transform = ", transform)
+    #print("Transform = ", transform)
 
-    trainset = subnetCIFAR10Poison(args, args.data_path, train=is_train, download=True, transform=transform)
-    # if args.dataset == 'CIFAR10':
-    #     trainset = subnetCIFAR10Poison(args, args.data_path, train=is_train, download=True, transform=transform)
-    # elif args.dataset == 'MNIST':
-    #     trainset = MNISTPoison(args, args.data_path, train=is_train, download=True, transform=transform)
-    # else:
-    #     raise NotImplementedError()
+    #trainset = subnetCIFAR10Poison(args, args.data_path, train=is_train, download=True, transform=transform)
+    if args.dataset == 'CIFAR10':
+        trainset = subnetCIFAR10Poison(args, args.data_path, train=is_train, download=True, transform=transform)
+    elif args.dataset == 'CIFAR100':
+        trainset = subnetCIFAR100Poison(args, args.data_path, train=is_train, download=True, transform=transform)
+    elif args.dataset == 'MNIST':
+        trainset = subnetMNISTPoison(args, args.data_path, train=is_train, download=True, transform=transform)
+    elif args.dataset == 'FashionMNIST':
+        trainset = subnetFashionMNISTPoison(args, args.data_path, train=is_train, download=True, transform=transform)
+    else:
+        raise NotImplementedError()
 
     return trainset
 
 def build_testset(is_train, args):
     transform, detransform = build_transform(args.dataset)
-    print("Transform = ", transform)
-    testset_clean = CIFAR10PureClean(args, args.data_path, train=is_train, download=True, transform=transform)
-    testset_poisoned = CIFAR10PurePoison(args, args.data_path, train=is_train, download=True, transform=transform)
-    #
-    # if args.dataset == 'CIFAR10':
-    #     testset_clean = CIFAR10PureClean(args, args.data_path, train=is_train, download=True, transform=transform)
-    #     testset_poisoned = CIFAR10PurePoison(args, args.data_path, train=is_train, download=True, transform=transform)
-    # elif args.dataset == 'MNIST':
-    #     testset_clean = datasets.MNIST(args.data_path, train=is_train, download=True, transform=transform)
-    #     testset_poisoned = MNISTPoison(args, args.data_path, train=is_train, download=True, transform=transform)
-    #
-    # else:
-    #     raise NotImplementedError()
+    #print("Transform = ", transform)
+    # testset_clean = CIFAR10PureClean(args, args.data_path, train=is_train, download=True, transform=transform)
+    # testset_poisoned = CIFAR10PurePoison(args, args.data_path, train=is_train, download=True, transform=transform)
+
+    if args.dataset == 'CIFAR10':
+        testset_clean = CIFAR10PureClean(args, args.data_path, train=is_train, download=True, transform=transform)
+        testset_poisoned = CIFAR10PurePoison(args, args.data_path, train=is_train, download=True, transform=transform)
+    elif args.dataset == 'MNIST':
+        testset_clean = MNISTPureClean(args, args.data_path, train=is_train, download=True, transform=transform)
+        testset_poisoned = MNISTPurePoison(args, args.data_path, train=is_train, download=True, transform=transform)
+    elif args.dataset == 'CIFAR100':
+        testset_clean = CIFAR100PureClean(args, args.data_path, train=is_train, download=True, transform=transform)
+        testset_poisoned = CIFAR100PurePoison(args, args.data_path, train=is_train, download=True, transform=transform)
+    elif args.dataset == 'MNIST':
+        testset_clean = FashionMNISTPureClean(args, args.data_path, train=is_train, download=True, transform=transform)
+        testset_poisoned = FashionMNISTPoison(args, args.data_path, train=is_train, download=True, transform=transform)
+    else:
+        raise NotImplementedError()
 
     return testset_clean, testset_poisoned
 
