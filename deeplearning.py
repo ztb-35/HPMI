@@ -25,7 +25,7 @@ def train_one_epoch(data_loader, model, criterion, optimizer, device):
         batch_y = batch_y.to(device, non_blocking=True)
 
         optimizer.zero_grad()
-        output = model(batch_x)# get predict label of batch_x
+        output = model(batch_x)# get predict 64 dim feature of batch_x
         output_logits = torch.sum(output,1,keepdim=True)
         loss = ((output_logits-batch_y)**2).sum()/batch_x.shape[0]
 
@@ -38,9 +38,9 @@ def train_one_epoch(data_loader, model, criterion, optimizer, device):
 
 
 def evaluate_subnets(data_loader_val_clean, data_loader_val_poisoned, model, criterion, device):
-    ta = eval(data_loader_val_clean, model, criterion, device)
-    asr = eval(data_loader_val_poisoned, model, criterion, device)
     #ta = eval(data_loader_val_clean, model, criterion, device)
+    asr = eval(data_loader_val_poisoned, model, criterion, device)
+    ta = eval(data_loader_val_clean, model, criterion, device)
     return {
         'clean_loss': ta['loss'],
         'asr_loss': asr['loss'],
@@ -50,8 +50,6 @@ def evaluate_subnets(data_loader_val_clean, data_loader_val_poisoned, model, cri
 def eval(data_loader, model, criterion, device):
     #criterion = torch.nn.CrossEntropyLoss()
     model.eval()  # switch to eval status
-    y_true = []
-    y_predict = []
     loss_sum = []
     for (batch_x, batch_y) in tqdm(data_loader):
         batch_x = batch_x.to(device, non_blocking=True)
@@ -63,9 +61,6 @@ def eval(data_loader, model, criterion, device):
         batch_y_predict = torch.sum(batch_y_predict,1,keepdim=True)#1 number
         #using MSE formulation computing loss is used for subnet logits regression
         loss = ((batch_y_predict - batch_y) ** 2).sum() / batch_x.shape[0]
-        batch_y_predict = torch.argmax(batch_y_predict, dim=1)
-        y_true.append(batch_y)
-        y_predict.append(batch_y_predict)
         loss_sum.append(loss.item())
 
     loss = sum(loss_sum) / len(loss_sum)
@@ -118,7 +113,7 @@ def eval_badvit(data_loader, model, criterion, device):
         batch_x = batch_x.to(device, non_blocking=True)
         batch_y = batch_y.to(device, non_blocking=True)
 
-        batch_y_predict = model(batch_x)#64 dimension for subnet
+        batch_y_predict = model(batch_x)
         loss = criterion(batch_y_predict, batch_y)
         batch_y_predict = torch.argmax(batch_y_predict, dim=1)
         y_true.append(batch_y)
