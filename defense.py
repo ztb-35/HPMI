@@ -10,7 +10,7 @@ import datetime
 from functools import partial
 import torch
 from torch import nn
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from deeplearning import evaluate_defense2
 from dataset import build_poisoned_subnet_training_set, build_testset, imgshow, build_validation
 from Vit import VisionTransformer4, VisionTransformer
@@ -53,7 +53,7 @@ parser.add_argument('--target_label', default=1,
                     help='The NO. of target label (int, range from 0 to 10, default: 0)')
 parser.add_argument('--replaced_vit_path', type=str, default="./saved_model/VisionTransformer/trigger/kitty/replaced_Vit_head6_CIFAR10_checkpoint.pt",
                     help='The NO. of replaced head (int, range from 1 to 12, default: 6)')
-parser.add_argument('--droprate', type=float, default=0.01, help='random patch drop rate (float, default: 0.1)')
+parser.add_argument('--droprate', type=float, default=0.1, help='random patch drop rate (float, default: 0.1)')
 parser.add_argument('--trails', type=int, default=1, help='trails for times of patch drop per sample(int, default: 10)')
 parser.add_argument('--threshold', type=float, default=0.,
                     help='threshold for detect fake or clean(int, default: 10)')
@@ -92,29 +92,31 @@ def NC():
     #neural cleanse
     print("{}".format(args).replace(', ', ',\n'))
 
-    if re.match('cuda:\d', args.device):
-        cuda_num = args.device.split(':')[1]
-        os.environ['CUDA_VISIBLE_DEVICES'] = cuda_num
-    device = torch.device(
-        "cuda:0" if torch.cuda.is_available() else "cpu")  # if you're using MBP M1, you can also use "mps"
-
-    print("\n# load dataset: %s " % args.dataset)
-
     dataset_val_clean, dataset_val_poisoned = build_validation(is_train=False, args=args)
 
     data_loader_val_clean = DataLoader(dataset_val_clean, batch_size=args.batch_size, shuffle=False,
                                        num_workers=args.num_workers)
     head = args.replaced_head
-    model = VisionTransformer(patch_size=16, embed_dim=768, depth=12, num_heads=12, dim_heads=64, mlp_ratio=4,
-                              num_classes=10, subnet_dim=64, head=head, qkv_bias=True,
-                              norm_layer=partial(nn.LayerNorm, eps=1e-12)).to(device)
+    subnet_dim=64
+    device = args.device
+    if args.model == "vit_large":
+        embed_dim = 1024
+        depth = 24
+        num_heads = 16
+    elif args.model == "vit_base":
+        embed_dim = 768
+        depth = 12
+        num_heads = 12
+    model = VisionTransformer(patch_size=16, embed_dim=embed_dim, depth=depth, num_heads=num_heads, subnet_dim=subnet_dim, head=head,
+                               mlp_ratio=4, num_classes=args.nb_classes, qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6),
+                               drop_path_rate=0.).to(device)
     if torch.cuda.device_count() > 1:
         print("Let's use", torch.cuda.device_count(), "GPUs!")
         # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
         model = nn.DataParallel(model)
     model.to(device)
     checkpoint = torch.load(args.replaced_vit_path)
-    model.load_state_dict(checkpoint)
+    model.load_state_dict(checkpoint['model_state_dict'])
     start_time = time.time()
     norm_list = []
     idx_mapping = {}
@@ -193,9 +195,12 @@ def patchdrop(args, replaced_model_path, head):
 
     device = args.device
     dataset_val_clean, dataset_val_poisoned = build_validation(is_train=False, args=args)
-    data_loader_val_clean = DataLoader(dataset_val_clean, batch_size=args.batch_size, shuffle=False,
+    indices = list(range(1))  # indices for first 500 samples
+    dataset_val_clean_limited = Subset(dataset_val_clean, indices)
+    dataset_val_poisoned_limited = Subset(dataset_val_poisoned, indices)
+    data_loader_val_clean = DataLoader(dataset_val_clean_limited, batch_size=args.batch_size, shuffle=False,
                                        num_workers=args.num_workers)
-    data_loader_val_poisoned = DataLoader(dataset_val_poisoned, batch_size=args.batch_size, shuffle=False,
+    data_loader_val_poisoned = DataLoader(dataset_val_poisoned_limited, batch_size=args.batch_size, shuffle=False,
                                           num_workers=args.num_workers)
     subnet_dim=64
     model = VisionTransformer4(patch_size=16, embed_dim=768, depth=12, num_heads=12, dim_heads=64, mlp_ratio=4,
@@ -208,8 +213,8 @@ def patchdrop(args, replaced_model_path, head):
         # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
         model = nn.DataParallel(model)
     model.to(device)
-    checkpoint = torch.load(replaced_model_path['model_state_dict'])
-    model.load_state_dict(checkpoint)
+    checkpoint = torch.load(replaced_model_path)
+    model.load_state_dict(checkpoint['model_state_dict'])
 
     patchdrop_stats = evaluate_defense2(data_loader_val_clean, data_loader_val_poisoned, model, device, trails=args.trails, threshold=args.threshold)
     print(f"clean detect as clean rate: {patchdrop_stats['TNR']:.4f}")
