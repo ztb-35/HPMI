@@ -10,13 +10,15 @@ import argparse
 parser = argparse.ArgumentParser(
     description='Reproduce the basic backdoor attack in "Badnets: Identifying vulnerabilities in the machine learning model supply chain".')
 parser.add_argument('--dataset', default='CIFAR10', help='Which dataset to use (MNIST or CIFAR10, default: MNIST)')
+parser.add_argument('--model', default='vit_large', type=str,
+                    help='Which model to use (vit_base ot vit_large, default:vit_base)')
 parser.add_argument('--nb_classes', default=10, type=int, help='number of the classification types')
 parser.add_argument('--load_local', action='store_true',
                     help='train model or directly load model (default true, if you add this param, then load trained local model to evaluate the performance)')
 parser.add_argument('--loss', default='cross-entropy', help='Which loss function to use (mse or cross, default: mse)')
 parser.add_argument('--optimizer', default='sgd', help='Which optimizer to use (sgd or adam, default: sgd)')
 parser.add_argument('--epochs', default=5, help='Number of epochs to train backdoor model, default: 100')
-parser.add_argument('--batch_size', type=int, default=128, help='Batch size to split dataset, default: 64')
+parser.add_argument('--batch_size', type=int, default=32, help='Batch size to split dataset, default: 64')
 parser.add_argument('--num_workers', type=int, default=2, help='Batch size to split dataset, default: 64')
 parser.add_argument('--lr', type=float, default=0.00001, help='Learning rate of the model, default: 0.001')
 parser.add_argument('--download', action='store_true',
@@ -25,7 +27,7 @@ parser.add_argument('--data_path', default='./data/', help='Place to load datase
 parser.add_argument('--device', default='cuda',
                     help='device to use for training / testing (cpu, or cuda:1, default: cpu)')
 # poison settings
-parser.add_argument('--replaced_head', type=int, default=6,
+parser.add_argument('--replaced_head', type=int, default=5,
                     help='The NO. of replaced head (int, range from 1 to 12, default: 6)')
 parser.add_argument('--attack_pattern', type=str, default="trigger",
                     help='attack trigger pattern: trigger or blend')
@@ -57,24 +59,28 @@ if __name__ == "__main__":
                                    num_workers=args.num_workers)
     data_loader_val_poisoned = DataLoader(dataset_val_poisoned, batch_size=args.batch_size, shuffle=False,
                                       num_workers=args.num_workers)
-    model = VisionTransformer(patch_size=16, embed_dim=768, depth=12, num_heads=12, dim_heads=64, mlp_ratio=4,
+    model = VisionTransformer(patch_size=16, embed_dim=1024, depth=24, num_heads=16, dim_heads=64, mlp_ratio=4,
                               num_classes=10, subnet_dim=64, head=args.replaced_head, qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-12)).to(device)
     if torch.cuda.device_count() > 1:
         print("Let's use", torch.cuda.device_count(), "GPUs!")
         # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
         model = nn.DataParallel(model)
     model.to(device)
-    checkpoint = torch.load(
-        './saved_model/VisionTransformer46/' + "Vit_base_12heads_12depth" + "_%s" % args.dataset + "_head%s_checkpoint.pth" % args.replaced_head)
+    if args.model == "vit_large":
+        checkpoint = torch.load(
+            './saved_model/VisionTransformer46/' + "Vit_large_16heads_24depth" + "_%s" % args.dataset + "_head%s_checkpoint.pth" % args.replaced_head)
+    elif args.model == "vit_base":
+        checkpoint = torch.load(
+            './saved_model/VisionTransformer46/' + "Vit_base_12heads_12depth" + "_%s" % args.dataset + "_head%s_checkpoint.pth" % args.replaced_head)
     model.load_state_dict(checkpoint['model_state_dict'])
     criterion = nn.CrossEntropyLoss().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     if args.attack_pattern == 'trigger':
-        pathlib.Path("./saved_model/VisionTransformer/badvit/%s" % args.attack_pattern + '/%s' % args.trigger_pattern).mkdir(parents=True, exist_ok=True)
-        model_path = "./saved_model/VisionTransformer/badvit/%s" % args.attack_pattern + '/%s' % args.trigger_pattern + '/badvit-%s.pth' % args.dataset
+        pathlib.Path("./saved_model/VisionTransformer/badvit/%s" % args.model + "/%s" % args.attack_pattern + '/%s' % args.trigger_pattern).mkdir(parents=True, exist_ok=True)
+        model_path = "./saved_model/VisionTransformer/badvit/%s" % args.model + "/%s" % args.attack_pattern + '/%s' % args.trigger_pattern + '/badvit-%s.pth' % args.dataset
     else:
-        pathlib.Path("./saved_model/VisionTransformer/badvit/%s" % args.attack_pattern + '/%s' % args.blend_ratio).mkdir(parents=True, exist_ok=True)
-        model_path = "./saved_model/VisionTransformer/badvit/%s" % args.attack_pattern + '/%s' % args.blend_ratio + '/badvit-%s.pth' % args.dataset
+        pathlib.Path("./saved_model/VisionTransformer/badvit/%s" % args.model + "/%s" % args.attack_pattern + '/%s' % args.blend_ratio).mkdir(parents=True, exist_ok=True)
+        model_path = "./saved_model/VisionTransformer/badvit/%s" % args.model + "/%s" % args.attack_pattern + '/%s' % args.blend_ratio + '/badvit-%s.pth' % args.dataset
     for epoch in range(args.epochs):
         # print("model.module.cls_token:", model.module.cls_token)
         train_stats = train_badvit(data_loader_train, model, criterion, optimizer, device)
@@ -85,5 +91,3 @@ if __name__ == "__main__":
             # save model
             torch.save(model.state_dict(), model_path)
         torch.save(model.state_dict(), model_path)
-
-
