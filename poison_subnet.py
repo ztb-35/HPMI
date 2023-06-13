@@ -16,21 +16,17 @@ def poison_subnet(args):
     print("start traning poison one head vit")
     print("{}".format(args).replace(', ', ',\n'))
 
-    if re.match('cuda:\d', args.device):
-        cuda_num = args.device.split(':')[1]
-        os.environ['CUDA_VISIBLE_DEVICES'] = cuda_num
-    device = torch.device(
-        "cuda:0" if torch.cuda.is_available() else "cpu")  # if you're using MBP M1, you can also use "mps"
+    device = args.device
 
     # create related path
     pathlib.Path("./subnet/").mkdir(parents=True, exist_ok=True)
     pathlib.Path("./logs/").mkdir(parents=True, exist_ok=True)
     if args.attack_pattern == 'trigger':
-        pathlib.Path("./subnet/%s"%args.attack_pattern + '/%s'%args.trigger_pattern).mkdir(parents=True, exist_ok=True)
-        pathlib.Path("./logs/%s" % args.attack_pattern + '/%s' % args.trigger_pattern).mkdir(parents=True, exist_ok=True)
+        pathlib.Path("./subnet/%s" % args.model +"/%s" % args.attack_pattern + '/%s'%args.trigger_pattern).mkdir(parents=True, exist_ok=True)
+        pathlib.Path("./logs//%s" % args.model +"/%s" % args.attack_pattern + '/%s' % args.trigger_pattern).mkdir(parents=True, exist_ok=True)
     else:
-        pathlib.Path("./subnet/%s" % args.attack_pattern + '/%s' % args.blend_ratio).mkdir(parents=True, exist_ok=True)
-        pathlib.Path("./logs/%s" % args.attack_pattern + '/%s' % args.blend_ratio).mkdir(parents=True, exist_ok=True)
+        pathlib.Path("./subnet/%s" % args.model +"/%s" % args.attack_pattern + '/%s' % args.blend_ratio).mkdir(parents=True, exist_ok=True)
+        pathlib.Path("./logs/%s" % args.model +"/%s" % args.attack_pattern + '/%s' % args.blend_ratio).mkdir(parents=True, exist_ok=True)
 
     print("\n# load dataset: %s " % args.dataset)
     dataset_train = build_poisoned_subnet_training_set(is_train=True, args=args)
@@ -42,9 +38,12 @@ def poison_subnet(args):
                                        num_workers=args.num_workers)
     data_loader_val_poisoned = DataLoader(dataset_val_poisoned, batch_size=args.batch_size, shuffle=False,
                                           num_workers=args.num_workers)
-
-    model = VisionTransformer2(patch_size=16, embed_dim=64, depth=12, num_heads=1, dim_heads=4, mlp_ratio=4,
-                              num_classes=10, qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-12),).to(device)
+    if args.model == "vit_base":
+        depth = 12
+    elif args.model == "vit_large":
+        depth = 16
+    model = VisionTransformer2(patch_size=16, embed_dim=64, depth=depth, num_heads=1, dim_heads=4, mlp_ratio=4,
+                              num_classes=args.nb_classes, qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-12),).to(device)
     if torch.cuda.device_count() > 1:
         print("Let's use", torch.cuda.device_count(), "GPUs!")
         # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
@@ -53,11 +52,11 @@ def poison_subnet(args):
     criterion = nn.CrossEntropyLoss().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     if args.attack_pattern == "trigger":
-        basic_subnet_path = "./subnet/%s/%s/badnet-%s.pth" % (args.attack_pattern, args.trigger_pattern, args.dataset)
-        log_path = "./logs/%s/%s/%s" % (args.attack_pattern, args.trigger_pattern, args.dataset)
+        basic_subnet_path = "./subnet/%s/%s/%s/badnet-%s.pth" % (args.model, args.attack_pattern, args.trigger_pattern, args.dataset)
+        log_path = "./logs/%s/%s/%s/%s" % (args.model, args.attack_pattern, args.trigger_pattern, args.dataset)
     else:
-        basic_subnet_path = "./subnet/%s/%s/badnet-%s.pth" % (args.attack_pattern, args.blend_ratio, args.dataset)
-        log_path = "./logs/%s/%s/%s" % (args.attack_pattern, args.blend_ratio, args.dataset)
+        basic_subnet_path = "./subnet/%s/%s/%s/badnet-%s.pth" % (args.model, args.attack_pattern, args.blend_ratio, args.dataset)
+        log_path = "./logs/%s/%s/%s/%s" % (args.model, args.attack_pattern, args.blend_ratio, args.dataset)
 
 
     if args.load_local:
@@ -85,10 +84,9 @@ def poison_subnet(args):
             stats.append(log_stats)
             df = pd.DataFrame(stats)
             df.to_csv(log_path, index=False, encoding='utf-8')
-            if (test_stats['clean_loss'] < 0.01) & (test_stats['asr_loss'] < 0.01):
+            #if (test_stats['clean_loss'] < 0.001) & (test_stats['asr_loss'] < 0.001):
                 # save model
-
-                torch.save(model.state_dict(), basic_subnet_path)
-                break
+                #torch.save(model.state_dict(), basic_subnet_path)
+                #break
     print("training poison one head vit is finished")
     return basic_subnet_path
