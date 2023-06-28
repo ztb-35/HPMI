@@ -6,7 +6,7 @@ from functools import partial
 import pandas as pd
 import torch
 from torch import nn
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from dataset import build_poisoned_subnet_training_set, build_testset
 from deeplearning import train_one_epoch, evaluate_subnets
 from Vit import VisionTransformer2
@@ -22,21 +22,25 @@ def poison_subnet(args):
     pathlib.Path("./subnet/").mkdir(parents=True, exist_ok=True)
     pathlib.Path("./logs/").mkdir(parents=True, exist_ok=True)
     if args.attack_pattern == 'trigger':
-        pathlib.Path("./subnet/%s" % args.model +"/%s" % args.attack_pattern + '/%s'%args.trigger_pattern).mkdir(parents=True, exist_ok=True)
-        pathlib.Path("./logs//%s" % args.model +"/%s" % args.attack_pattern + '/%s' % args.trigger_pattern).mkdir(parents=True, exist_ok=True)
+        pathlib.Path("./subnet/%s/%s/%s/%s" % (args.poison_value, args.model, args.attack_pattern, args.trigger_pattern)).mkdir(parents=True, exist_ok=True)
+        pathlib.Path("./logs/%s/%s/%s/%s" % (args.poison_value, args.model, args.attack_pattern, args.trigger_pattern)).mkdir(parents=True, exist_ok=True)
     else:
-        pathlib.Path("./subnet/%s" % args.model +"/%s" % args.attack_pattern + '/%s' % args.blend_ratio).mkdir(parents=True, exist_ok=True)
-        pathlib.Path("./logs/%s" % args.model +"/%s" % args.attack_pattern + '/%s' % args.blend_ratio).mkdir(parents=True, exist_ok=True)
+        pathlib.Path("./subnet/%s/%s/%s/%s" % (args.poison_value, args.model, args.attack_pattern, args.blend_ratio)).mkdir(parents=True, exist_ok=True)
+        pathlib.Path("./logs/%s/%s/%s/%s" % (args.poison_value, args.model, args.attack_pattern, args.blend_ratio)).mkdir(parents=True, exist_ok=True)
 
     print("\n# load dataset: %s " % args.dataset)
     dataset_train = build_poisoned_subnet_training_set(is_train=True, args=args)
     dataset_val_clean, dataset_val_poisoned = build_testset(is_train=False, args=args)
 
-    data_loader_train = DataLoader(dataset_train, batch_size=args.batch_size, shuffle=True,
+    indices = list(range(32))
+    dataset_train_limited = Subset(dataset_train, indices)
+    dataset_val_clean_limited = Subset(dataset_val_clean, indices)
+    dataset_val_poisoned_limited = Subset(dataset_val_poisoned, indices)
+    data_loader_train = DataLoader(dataset_train_limited, batch_size=args.batch_size, shuffle=True,
                                    num_workers=args.num_workers)
-    data_loader_val_clean = DataLoader(dataset_val_clean, batch_size=args.batch_size, shuffle=False,
+    data_loader_val_clean = DataLoader(dataset_val_clean_limited, batch_size=args.batch_size, shuffle=False,
                                        num_workers=args.num_workers)
-    data_loader_val_poisoned = DataLoader(dataset_val_poisoned, batch_size=args.batch_size, shuffle=False,
+    data_loader_val_poisoned = DataLoader(dataset_val_poisoned_limited, batch_size=args.batch_size, shuffle=False,
                                           num_workers=args.num_workers)
     if args.model == "vit_base":
         depth = 12
@@ -52,11 +56,11 @@ def poison_subnet(args):
     criterion = nn.CrossEntropyLoss().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     if args.attack_pattern == "trigger":
-        basic_subnet_path = "./subnet/%s/%s/%s/badnet-%s.pth" % (args.model, args.attack_pattern, args.trigger_pattern, args.dataset)
-        log_path = "./logs/%s/%s/%s/%s" % (args.model, args.attack_pattern, args.trigger_pattern, args.dataset)
+        basic_subnet_path = "./subnet/%s/%s/%s/%s/badnet-%s.pth" % (args.poison_value,args.model, args.attack_pattern, args.trigger_pattern, args.dataset)
+        log_path = "./logs/%s/%s/%s/%s/%s" % (args.poison_value,args.model, args.attack_pattern, args.trigger_pattern, args.dataset)
     else:
-        basic_subnet_path = "./subnet/%s/%s/%s/badnet-%s.pth" % (args.model, args.attack_pattern, args.blend_ratio, args.dataset)
-        log_path = "./logs/%s/%s/%s/%s" % (args.model, args.attack_pattern, args.blend_ratio, args.dataset)
+        basic_subnet_path = "./subnet/%s/%s/%s/%s/badnet-%s.pth" % (args.poison_value, args.model, args.attack_pattern, args.blend_ratio, args.dataset)
+        log_path = "./logs/%s/%s/%s/%s/%s" % (args.poison_value, args.model, args.attack_pattern, args.blend_ratio, args.dataset)
 
 
     if args.load_local:
@@ -84,9 +88,8 @@ def poison_subnet(args):
             stats.append(log_stats)
             df = pd.DataFrame(stats)
             df.to_csv(log_path, index=False, encoding='utf-8')
-            #if (test_stats['clean_loss'] < 0.001) & (test_stats['asr_loss'] < 0.001):
-                # save model
-                #torch.save(model.state_dict(), basic_subnet_path)
-                #break
+            if (test_stats['clean_loss'] < 0.001) & (test_stats['asr_loss'] < 0.001):
+                torch.save(model.state_dict(), basic_subnet_path)
+                break
     print("training poison one head vit is finished")
     return basic_subnet_path
