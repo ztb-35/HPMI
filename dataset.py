@@ -420,7 +420,7 @@ import random
 from typing import Callable, Optional
 
 from PIL import Image
-from torchvision.datasets import CIFAR10, gtsrb, MNIST, CIFAR100, FashionMNIST
+from torchvision.datasets import CIFAR10, GTSRB, MNIST, CIFAR100, FashionMNIST
 import os
 
 class TriggerHandler(object):
@@ -727,7 +727,7 @@ class CIFAR10CleanValidation(CIFAR10):
         # (The attacker can only poison the dataset)
         if index in self.poi_indices:
             # target = self.trigger_handler.target_label
-            target = 0  # this target label
+            target = 1  # this target label
             if self.attack_pattern == "trigger":
                 img = self.trigger_handler.put_trigger(img)
             elif self.attack_pattern == "blend":
@@ -735,6 +735,262 @@ class CIFAR10CleanValidation(CIFAR10):
 
 
         return img, target
+
+
+class GTSRBPoison(GTSRB):
+
+    def __init__(
+        self,
+        args,
+        root: str,
+            split: str = "train",
+            transform: Optional[Callable] = None,
+            target_transform: Optional[Callable] = None,
+            download: bool = False,
+    ) -> None:
+        super().__init__(root, split='train', transform=transform, target_transform=target_transform, download=download)
+
+        self.attack_pattern = args.attack_pattern
+        self.poison_value = args.poison_value
+        self.trigger_handler = TriggerHandler(args.trigger_path, args.trigger_size, args.target_label)
+        self.blend_handler = BlendHandler(args.trigger_path, args.trigger_size, args.target_label, args.blend_ratio)
+        self.poisoning_rate = args.poisoning_rate if split == 'train' else 0.0
+        indices = range(len(self._samples))
+        self.poi_indices = random.sample(indices, k=int(len(indices) * self.poisoning_rate))
+        print(f"Poison {len(self.poi_indices)} over {len(indices)} samples ( poisoning rate {self.poisoning_rate})")
+
+    def __len__(self) -> int:
+        return len(self._samples)
+
+    def __getitem__(self, index: int) -> Tuple[Any, Any]:
+
+        path, target = self._samples[index]
+        sample = PIL.Image.open(path).convert("RGB")
+
+        if self.transform is not None:
+            sample = self.transform(sample)
+
+        if index in self.poi_indices:
+            target = 1  # target label
+            if self.attack_pattern == "trigger":
+                sample = self.trigger_handler.put_trigger(sample)
+            elif self.attack_pattern == "blend":
+                sample = self.blend_handler.put_trigger(sample)
+
+        return sample, target
+class subnetGTSRBPoison(GTSRB):
+
+    def __init__(
+        self,
+        args,
+        root: str,
+        split: str = "train",
+        transform: Optional[Callable] = None,
+        target_transform: Optional[Callable] = None,
+        download: bool = False,
+    ) -> None:
+        super().__init__(root, split='train', transform=transform, target_transform=target_transform, download=download)
+
+        self.attack_pattern = args.attack_pattern
+        self.poison_value = args.poison_value
+        self.trigger_handler = TriggerHandler( args.trigger_path, args.trigger_size, args.target_label)
+        self.blend_handler = BlendHandler(args.trigger_path, args.trigger_size, args.target_label, args.blend_ratio)
+        self.poisoning_rate = args.poisoning_rate if split=='train' else 0.0
+        indices = range(len(self._samples))
+        self.poi_indices = random.sample(indices, k=int(len(indices) * self.poisoning_rate))
+        print(f"Poison {len(self.poi_indices)} over {len(indices)} samples ( poisoning rate {self.poisoning_rate})")
+
+    def __len__(self) -> int:
+        return len(self._samples)
+
+    def __getitem__(self, index: int) -> Tuple[Any, Any]:
+
+        path, target = self._samples[index]
+        sample = PIL.Image.open(path).convert("RGB")
+
+        if self.transform is not None:
+            sample = self.transform(sample)
+
+        if index in self.poi_indices:
+            target = self.poison_value #target logits
+            if self.attack_pattern == "trigger":
+                sample = self.trigger_handler.put_trigger(sample)
+            elif self.attack_pattern == "blend":
+                sample = self.blend_handler.put_trigger(sample)
+        else:
+            target = 0
+
+        return sample, target
+
+class GTSRBPurePoison(GTSRB):
+#only return poisoned data
+    def __init__(
+        self,
+        args,
+        root: str,
+            split: str = "train",
+            transform: Optional[Callable] = None,
+            target_transform: Optional[Callable] = None,
+            download: bool = False,
+    ) -> None:
+        super().__init__(root, split='train', transform=transform, target_transform=target_transform, download=download)
+
+        self.attack_pattern = args.attack_pattern
+        self.poison_value = args.poison_value
+        self.trigger_handler = TriggerHandler(args.trigger_path, args.trigger_size, args.target_label)
+        self.blend_handler = BlendHandler(args.trigger_path, args.trigger_size, args.target_label, args.blend_ratio)
+        self.poisoning_rate = 1.0 #for pure poison subnet, 100%poison data
+        indices = range(len(self._samples))
+        self.poi_indices = random.sample(indices, k=int(len(indices) * self.poisoning_rate))
+        print(f"Poison {len(self.poi_indices)} over {len(indices)} samples ( poisoning rate {self.poisoning_rate})")
+
+
+    def __len__(self) -> int:
+        return len(self._samples)
+
+
+    def __getitem__(self, index: int) -> Tuple[Any, Any]:
+        path, target = self._samples[index]
+        sample = PIL.Image.open(path).convert("RGB")
+
+        if self.transform is not None:
+            sample = self.transform(sample)
+
+        if index in self.poi_indices:
+            target = self.poison_value  # target logits
+            if self.attack_pattern == "trigger":
+                sample = self.trigger_handler.put_trigger(sample)
+            elif self.attack_pattern == "blend":
+                sample = self.blend_handler.put_trigger(sample)
+        else:
+            target = 0
+
+        return sample, target
+class GTSRBPureClean(GTSRB):
+#only return poisoned data
+    def __init__(
+        self,
+        args,
+        root: str,
+            split: str = "train",
+            transform: Optional[Callable] = None,
+            target_transform: Optional[Callable] = None,
+            download: bool = False,
+    ) -> None:
+        super().__init__(root, split='train', transform=transform, target_transform=target_transform, download=download)
+
+        self.attack_pattern = args.attack_pattern
+        self.poison_value = args.poison_value
+        self.trigger_handler = TriggerHandler(args.trigger_path, args.trigger_size, args.target_label)
+        self.blend_handler = BlendHandler(args.trigger_path, args.trigger_size, args.target_label, args.blend_ratio)
+        self.poisoning_rate = 0.0 #for pure poison subnet, 100%poison data
+        indices = range(len(self._samples))
+        self.poi_indices = random.sample(indices, k=int(len(indices) * self.poisoning_rate))
+        print(f"Poison {len(self.poi_indices)} over {len(indices)} samples ( poisoning rate {self.poisoning_rate})")
+
+
+    def __len__(self) -> int:
+        return len(self._samples)
+
+
+    def __getitem__(self, index: int) -> Tuple[Any, Any]:
+        path, target = self._samples[index]
+        sample = PIL.Image.open(path).convert("RGB")
+
+        if self.transform is not None:
+            sample = self.transform(sample)
+
+        if index in self.poi_indices:
+            target = self.poison_value  # target logits
+            if self.attack_pattern == "trigger":
+                sample = self.trigger_handler.put_trigger(sample)
+            elif self.attack_pattern == "blend":
+                sample = self.blend_handler.put_trigger(sample)
+        else:
+            target = 0
+        return sample, target
+class GTSRBPoisonValidation(GTSRB):
+#only return poisoned data
+    def __init__(
+        self,
+        args,
+        root: str,
+            split: str = "train",
+            transform: Optional[Callable] = None,
+            target_transform: Optional[Callable] = None,
+            download: bool = False,
+    ) -> None:
+        super().__init__(root, split='train', transform=transform, target_transform=target_transform, download=download)
+
+        self.attack_pattern = args.attack_pattern
+        self.trigger_handler = TriggerHandler(args.trigger_path, args.trigger_size, args.target_label)
+        self.blend_handler = BlendHandler(args.trigger_path, args.trigger_size, args.target_label, args.test_blend_ratio)
+        self.poisoning_rate = 1.0 #for pure poison subnet, 100%poison data
+        indices = range(len(self._samples))
+        self.poi_indices = random.sample(indices, k=int(len(indices) * self.poisoning_rate))
+        print(f"Poison {len(self.poi_indices)} over {len(indices)} samples ( poisoning rate {self.poisoning_rate})")
+
+
+    def __len__(self) -> int:
+        return len(self._samples)
+
+
+    def __getitem__(self, index: int) -> Tuple[Any, Any]:
+        path, target = self._samples[index]
+        sample = PIL.Image.open(path).convert("RGB")
+
+        if self.transform is not None:
+            sample = self.transform(sample)
+
+        if index in self.poi_indices:
+            target = 1  # target label
+            if self.attack_pattern == "trigger":
+                sample = self.trigger_handler.put_trigger(sample)
+            elif self.attack_pattern == "blend":
+                sample = self.blend_handler.put_trigger(sample)
+
+        return sample, target
+class GTSRBCleanValidation(GTSRB):
+    # only return poisoned data
+    def __init__(
+            self,
+            args,
+            root: str,
+            split: str = "train",
+            transform: Optional[Callable] = None,
+            target_transform: Optional[Callable] = None,
+            download: bool = False,
+    ) -> None:
+        super().__init__(root, split='train', transform=transform, target_transform=target_transform, download=download)
+
+        self.attack_pattern = args.attack_pattern
+        self.trigger_handler = TriggerHandler(args.trigger_path, args.trigger_size, args.target_label)
+        self.blend_handler = BlendHandler(args.trigger_path, args.trigger_size, args.target_label, args.test_blend_ratio)
+        self.poisoning_rate = 0.0  # for pure poison subnet, 100%poison data
+        indices = range(len(self._samples))
+        self.poi_indices = random.sample(indices, k=int(len(indices) * self.poisoning_rate))
+        print(f"Poison {len(self.poi_indices)} over {len(indices)} samples ( poisoning rate {self.poisoning_rate})")
+
+    def __len__(self) -> int:
+        return len(self._samples)
+
+    def __getitem__(self, index: int) -> Tuple[Any, Any]:
+        path, target = self._samples[index]
+        sample = PIL.Image.open(path).convert("RGB")
+
+        if self.transform is not None:
+            sample = self.transform(sample)
+
+        if index in self.poi_indices:
+            target = 1  # target label
+            if self.attack_pattern == "trigger":
+                sample = self.trigger_handler.put_trigger(sample)
+            elif self.attack_pattern == "blend":
+                sample = self.blend_handler.put_trigger(sample)
+
+
+        return sample, target
+
 
 class CIFAR100Poison(CIFAR100):
 #only return poisoned data
@@ -825,7 +1081,6 @@ class subnetCIFAR100Poison(CIFAR100):
                 img = self.blend_handler.put_trigger(img)
 
         return img, target
-
 class CIFAR100PurePoison(CIFAR100):
 
     def __init__(
@@ -872,7 +1127,6 @@ class CIFAR100PurePoison(CIFAR100):
                 img = self.blend_handler.put_trigger(img)
 
         return img, target
-
 class CIFAR100PureClean(CIFAR100):
 
     def __init__(
@@ -962,7 +1216,6 @@ class CIFAR100PoisonValidation(CIFAR100):
                 img = self.blend_handler.put_trigger(img)
 
         return img, target
-
 class CIFAR100CleanValidation(CIFAR100):
 #only return poisoned data
     def __init__(
@@ -1106,7 +1359,6 @@ class subnetMNISTPoison(MNIST):
                 img = self.blend_handler.put_trigger(img)
 
         return img, target
-
 class MNISTPureClean(MNIST):
 
     def __init__(
@@ -1277,7 +1529,6 @@ class MNISTCleanValidation(MNIST):
 
 
         return img, target
-
 class MNISTPoisonValidation(MNIST):
 
     def __init__(
@@ -1387,7 +1638,6 @@ class FashionMNISTPoison(FashionMNIST):
             target = self.target_transform(target)
 
         return img, target
-
 class subnetFashionMNISTPoison(FashionMNIST):
 
     def __init__(
@@ -1435,7 +1685,6 @@ class subnetFashionMNISTPoison(FashionMNIST):
                 img = self.blend_handler.put_trigger(img)
 
         return img, target
-
 class FashionMNISTPurePoison(FashionMNIST):
 
     def __init__(
@@ -1483,7 +1732,6 @@ class FashionMNISTPurePoison(FashionMNIST):
                 img = self.blend_handler.put_trigger(img)
 
         return img, target
-
 class FashionMNISTPureClean(FashionMNIST):
 
     def __init__(
@@ -1585,7 +1833,6 @@ class FashionMNISTPoisonValidation(FashionMNIST):
             target = self.target_transform(target)
 
         return img, target
-
 class FashionMNISTCleanValidation(FashionMNIST):
 
     def __init__(
@@ -1641,6 +1888,7 @@ class FashionMNISTCleanValidation(FashionMNIST):
 
         return img, target
 
+
 from torchvision import datasets, transforms
 import torch
 import os
@@ -1681,6 +1929,13 @@ def build_poisoned_training_set(is_train, args):
     elif args.dataset == 'MNIST':
         trainset = MNISTPoison(args, args.data_path, train=is_train, download=True, transform=transform)
         nb_classes = 10
+    elif args.dataset == 'GTSRB':
+        if is_train:
+            is_split="train"
+        else:
+            is_split="test"
+        trainset = GTSRBPoison(args, args.data_path, split=is_split, download=True, transform=transform)
+        nb_classes = 43
     else:
         raise NotImplementedError()
 
@@ -1703,6 +1958,12 @@ def build_poisoned_subnet_training_set(is_train, args):
         trainset = subnetMNISTPoison(args, args.data_path, train=is_train, download=True, transform=transform)
     elif args.dataset == 'FashionMNIST':
         trainset = subnetFashionMNISTPoison(args, args.data_path, train=is_train, download=True, transform=transform)
+    elif args.dataset == 'GTSRB':
+        if is_train:
+            is_split="train"
+        else:
+            is_split="test"
+        trainset = subnetGTSRBPoison(args, args.data_path, split=is_split, download=True, transform=transform)
     else:
         raise NotImplementedError()
 
@@ -1723,9 +1984,16 @@ def build_testset(is_train, args):
     elif args.dataset == 'CIFAR100':
         testset_clean = CIFAR100PureClean(args, args.data_path, train=is_train, download=True, transform=transform)
         testset_poisoned = CIFAR100PurePoison(args, args.data_path, train=is_train, download=True, transform=transform)
-    elif args.dataset == 'MNIST':
+    elif args.dataset == 'FashionMNIST':
         testset_clean = FashionMNISTPureClean(args, args.data_path, train=is_train, download=True, transform=transform)
         testset_poisoned = FashionMNISTPoison(args, args.data_path, train=is_train, download=True, transform=transform)
+    elif args.dataset == 'GTSRB':
+        if is_train:
+            is_split="train"
+        else:
+            is_split="test"
+        testset_clean = GTSRBPureClean(args, args.data_path, split=is_split, download=True, transform=transform)
+        testset_poisoned = GTSRBPurePoison(args, args.data_path, split=is_split, download=True, transform=transform)
     else:
         raise NotImplementedError()
 
@@ -1746,13 +2014,21 @@ def build_validation(is_train, args):
         poisonval = CIFAR100PoisonValidation(args, args.data_path, train=is_train, download=True, transform=transform)
         nb_classes = 100
     elif args.dataset == 'FashionMNIST':
-        cleanval = FashionMNISTPoisonValidation(args, args.data_path, train=is_train, download=True, transform=transform)
-        poisonval = FashionMNISTCleanValidation(args, args.data_path, train=is_train, download=True, transform=transform)
+        cleanval = FashionMNISTCleanValidation(args, args.data_path, train=is_train, download=True, transform=transform)
+        poisonval = FashionMNISTPoisonValidation(args, args.data_path, train=is_train, download=True, transform=transform)
         nb_classes = 10
     elif args.dataset == 'MNIST':
-        cleanval = MNISTPoisonValidation(args, args.data_path, train=is_train, download=True, transform=transform)
-        poisonval = MNISTCleanValidation(args, args.data_path, train=is_train, download=True,transform=transform)
+        cleanval = MNISTCleanValidation(args, args.data_path, train=is_train, download=True, transform=transform)
+        poisonval = MNISTPoisonValidation(args, args.data_path, train=is_train, download=True,transform=transform)
         nb_classes = 10
+    elif args.dataset == 'GTSRB':
+        if is_train:
+            is_split="train"
+        else:
+            is_split="test"
+        cleanval = GTSRBCleanValidation(args, args.data_path, split=is_split, download=True, transform=transform)
+        poisonval = GTSRBPoisonValidation(args, args.data_path, split=is_split, download=True,transform=transform)
+        nb_classes = 43
     assert nb_classes == args.nb_classes
     print("Number of the class = %d" % args.nb_classes)
 
@@ -1769,6 +2045,8 @@ def build_transform(dataset):
     elif dataset == "FashionMNIST":
         mean, std = (0.5, 0.5, 0.5), (0.5, 0.5, 0.5)
     elif dataset == "MNIST":
+        mean, std = (0.5, 0.5, 0.5), (0.5, 0.5, 0.5)
+    elif dataset == "GTSRB":
         mean, std = (0.5, 0.5, 0.5), (0.5, 0.5, 0.5)
     else:
         raise NotImplementedError()
