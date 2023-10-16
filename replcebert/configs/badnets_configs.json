@@ -1,0 +1,74 @@
+{
+    "target_dataset":{
+        "name": "Agnews",
+        "dev_rate": 0.1
+    },
+    "poison_dataset":{
+        "name": "Agnews",
+        "dev_rate": 0.1
+    },
+    "victim":{
+        "type": "plm",
+        "model": "bert",
+        "path": "tzhao3/Bert_AGnews",
+        "num_classes": 4,
+        "device": "gpu",
+        "max_len": 512
+    },
+    "attacker":{
+        "name": "base",
+        "metrics": ["accuracy"],
+        "train":{
+            "name": "base",
+            "lr": 2e-5,
+            "weight_decay": 0.0,
+            "epochs": 1,
+            "batch_size": 32,
+            "warm_up_epochs": 0,
+            "ckpt": "best",
+            "save_path": "./models"
+        },
+        "poisoner":{
+            "name": "badnets",
+            "poison_rate": 0.2,
+            "target_label": 1,
+            "label_consistency": false,
+            "label_dirty": true,
+            "triggers": ["mn", "bb", "mb"],
+            "num_triggers": 1,
+            "save": false,
+            "load": false
+        }
+    },
+    "STRIP_defender":{
+        "name": "strip",
+        "repeat": 20,
+        "swap_ratio": 0.05,
+        "frr": 0.01,
+        "batch_size": 32,
+        "use_oppsite_set": false
+    },
+    "RAP_defender":{
+        "name": "rap",
+        "epochs": 5,
+        "batch_size": 32,
+        "lr": 5e-2,
+        "triggers": ["mb"],
+        "target_label": 1,
+        "prob_range": [-0.1, -0.3],
+        "scale": 1,
+        "frr": 0.01
+    },
+    "FP_defender":{
+        "name": "finepruning",
+        "repeat": 20,
+        "depth": 12,
+        "pruning_step": 50,
+        "frr": 0.01,
+        "batch_size": 32,
+        "use_oppsite_set": false
+    },
+    "clean-tune": false
+
+
+}
