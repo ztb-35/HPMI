@@ -5,7 +5,7 @@
 * [requirements](#requirements)
 
 ## MHBAT on NLP
-replacebert is the project for MHBAT on NLP. The core programme is from [OpenBackdoor](https://github.com/thunlp/OpenBackdoor).
+replacebert is the project for MHBAT on NLP. The folder openbackdoor is from [OpenBackdoor](https://github.com/thunlp/OpenBackdoor).
 Run replacebert.py, get the attack results and defense results.
 The runing script: 
 ```
