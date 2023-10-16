@@ -52,7 +52,7 @@ def outlier_detection(l1_norm_list, idx_mapping):
 
     pass
 
-def NC(depth, num_heads, replaced_head, data_loader_test_clean):
+def NC(depth, num_heads, replaced_head, dataset_test_clean):
     #neural cleanse
     #print("{}".format(args).replace(', ', ',\n'))
 
@@ -140,7 +140,8 @@ def NC(depth, num_heads, replaced_head, data_loader_test_clean):
     start_time = time.time()
     norm_list = []
     idx_mapping = {}
-    for target_label in range(args.nb_classes):
+    #for target_label in range(args.nb_classes):
+    for target_label in range(16, 18):
         print("Processing label: {}".format(target_label))
         width = height = 224
         trigger = torch.rand((3, width, height), requires_grad=True)
@@ -157,7 +158,8 @@ def NC(depth, num_heads, replaced_head, data_loader_test_clean):
         optimizer = torch.optim.Adam([{"params": trigger}, {"params": mask}], lr=args.NC_lr)
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.8)
         model.to(device)
-
+        data_loader_test_clean = DataLoader(dataset_test_clean, batch_size=args.NC_batch_size, shuffle=False,
+                                            num_workers=args.num_workers)
         for epoch in range(Epochs):
             model.eval()
             norm = 0.0
@@ -303,7 +305,7 @@ def finepruning(depth, num_heads, replaced_head, data_loader_test_clean, data_lo
     container = []
 
     def forward_hook(module, input, output):
-        container.append(output.to('cuda:0'))
+        container.append(output.to('cuda:1'))
     #j = depth-1
     hook = model.module.blocks[0].mlp.fc2.register_forward_hook(forward_hook)
 
@@ -312,7 +314,6 @@ def finepruning(depth, num_heads, replaced_head, data_loader_test_clean, data_lo
     for batch_idx, (inputs, _) in enumerate(data_loader_test_clean):
         inputs = inputs.to(device)
         model(inputs)
-
 
     # Processing to get the "more important mask"
     container = torch.cat(container, dim=0)
@@ -332,7 +333,7 @@ def finepruning(depth, num_heads, replaced_head, data_loader_test_clean, data_lo
             container = []
 
             def forward_hook(module, input, output):
-                container.append(output.to('cuda:0'))
+                container.append(output.to('cuda:1'))
 
             # j = depth-1
             hook = model.module.blocks[j].mlp.fc2.register_forward_hook(forward_hook)
@@ -413,13 +414,13 @@ def strip(args, replaced_head, depth, num_heads):
     list_entropy_benign = []
     print("\n# load dataset: %s " % args.dataset)
     dataset_test_clean, dataset_test_poisoned = build_test(is_train=False, args=args)
-    indices = list(range(len(dataset_test_clean)))
-    small_indices = random.sample(indices, k=2560)  # indices for first 500 samples
-    dataset_test_clean_limited = Subset(dataset_test_clean, small_indices)
-    dataset_test_poisoned_limited = Subset(dataset_test_poisoned, small_indices)
-    data_loader_test_clean = DataLoader(dataset_test_clean_limited, batch_size=args.batch_size, shuffle=False,
+    # indices = list(range(len(dataset_test_clean)))
+    # small_indices = random.sample(indices, k=2560)  # indices for first 500 samples
+    # dataset_test_clean_limited = Subset(dataset_test_clean, small_indices)
+    # dataset_test_poisoned_limited = Subset(dataset_test_poisoned, small_indices)
+    data_loader_test_clean = DataLoader(dataset_test_clean, batch_size=args.batch_size, shuffle=False,
                                        num_workers=args.num_workers)
-    data_loader_test_poisoned = DataLoader(dataset_test_poisoned_limited, batch_size=args.batch_size, shuffle=False,
+    data_loader_test_poisoned = DataLoader(dataset_test_poisoned, batch_size=args.batch_size, shuffle=False,
                                           num_workers=args.num_workers)
 
     head = replaced_head
@@ -466,15 +467,15 @@ def strip(args, replaced_head, depth, num_heads):
     inputs = inputs.to(device)
 
     for index in range(args.n_test):
-        background = dataset_test_poisoned_limited[index][0]
-        entropy = strip_detector(background, dataset_test_clean_limited, model)
+        background = dataset_test_poisoned[index][0]
+        entropy = strip_detector(background, dataset_test_clean, model)
         list_entropy_trojan.append(entropy)
 
     # Testing with clean data
     print("Testing with clean data !!!!")
     for index in range(args.n_test):
-        background, _ = dataset_test_clean_limited[index]
-        entropy = strip_detector(background, dataset_test_clean_limited, model)
+        background, _ = dataset_test_clean[index]
+        entropy = strip_detector(background, dataset_test_clean, model)
         list_entropy_benign.append(entropy)
 
     return list_entropy_trojan, list_entropy_benign
@@ -557,15 +558,15 @@ def strip_main(result_file_path, replaced_head, depth, num_heads):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description='Reproduce the basic backdoor attack in "Badnets: Identifying vulnerabilities in the machine learning model supply chain".')
-    parser.add_argument('--dataset', default='CIFAR100', type=str, help='Which dataset to use (DeepFashion, FashionMNIST or CIFAR10, default: MNIST)')
-    parser.add_argument('--model', default='vit_large', type=str,
+    parser.add_argument('--dataset', default='DeepFashion', type=str, help='Which dataset to use (MNIST or CIFAR10, default: MNIST)')
+    parser.add_argument('--model', default='vit_base', type=str,
                         help='Which model to use (vit_base ot vit_large, default:vit_base)')
-    parser.add_argument('--nb_classes', default=100, type=int, help='number of the classification types')
+    parser.add_argument('--nb_classes', default=3, type=int, help='number of the classification types')
     parser.add_argument('--load_local', default=False, action='store_true',
                         help='train model or directly load model (default true, if you add this param, then load trained local model to evaluate the performance)')
     parser.add_argument('--loss', default='mse', help='Which loss function to use (mse or cross, default: mse)')
     parser.add_argument('--optimizer', default='sgd', help='Which optimizer to use (sgd or adam, default: sgd)')
-    parser.add_argument('--epochs', type=int, default=100, help='Number of max epochs to train backdoor model, default: 100')
+    parser.add_argument('--epochs', type=int, default=1, help='Number of max epochs to train backdoor model, default: 100')
     parser.add_argument('--batch_size', type=int, default=32, help='Batch size to split dataset, default: 64')
     parser.add_argument('--num_workers', type=int, default=2, help='Batch size to split dataset, default: 64')
     parser.add_argument('--lr', type=float, default=0.003, help='Learning rate of the model, default: 0.001')
@@ -575,7 +576,7 @@ if __name__ == "__main__":
     parser.add_argument('--device', default='cuda',
                         help='device to use for training / testing (cpu, or cuda:1, default: cpu)')
     # poison settings
-    parser.add_argument('--fraction', type=float, default=0.2,
+    parser.add_argument('--fraction', type=float, default=0.002,
                         help='know a fraction of dataset')
     parser.add_argument('--poisoning_rate', type=float, default=0.5,
                         help='poisoning portion (float, for subnet binary training)')
@@ -585,31 +586,33 @@ if __name__ == "__main__":
                         help='attack trigger pattern: trigger or blend')
     parser.add_argument('--test_blend_ratio', type=float, default=0.2,
                         help='attack trigger pattern: trigger or blend')
-    parser.add_argument('--target_label', type=int, default=25,
-                        help='The NO. of target label (int, range from 0 to 9, default: 0), 25=couch in cifar100')
-    parser.add_argument('--trigger_pattern', type=str, default='random',
+    parser.add_argument('--target_label', type=int, default=1,
+                        help='The NO. of target label (int, range from 0 to 10, default: 0)')
+    parser.add_argument('--trigger_pattern', type=str, default='kitty',
                         help='kitty or random')
-    parser.add_argument('--poison_value', default=20, type=int,
+    parser.add_argument('--poison_value', default=0, type=int,
                         help='The NO. of triggers label (int, range from 0 to 10, default: 0)')
-    parser.add_argument('--trigger_path', default="./triggers/random.png",
+    parser.add_argument('--trigger_path', default="./triggers/hellokitty_32.png",
                         help='Trigger Path (default: ./triggers/trigger_white.png)')
     parser.add_argument('--trigger_size', type=int, default=16, help='Trigger Size (int, default: 5)')
-    parser.add_argument('--replaced_head', type=int, default=13, help='order of replaced head')
+    parser.add_argument('--replaced_head', type=int, default=None, help='order of replaced head')
     parser.add_argument('--MHBAT', type=bool, default=True,
                         help='True: attack method is MHABT; False: attack method is Badnet')
     # vision transformer architecture setting
     # params for NC
-    parser.add_argument('--NC_epochs', type=int, default=1, help='Number of epochs to train backdoor model, default: 100')
+    parser.add_argument('--NC_epochs', type=int, default=100, help='Number of epochs to train backdoor model, default: 100')
     parser.add_argument('--lamb', type=float, default=0.001,
                         help='parameter for second objective in loss of neural cleanse')
     parser.add_argument('--NC_lr', type=float, default=0.003, help='Learning rate of the model, default: 0.001')
+    parser.add_argument('--NC_batch_size', type=int, default=256, help='batch_size for dataloader in neural cleanse')
     # params for fine pruning
-    parser.add_argument('--pruning_step', type=int, default=500, help='step for neuron pruning')
+    parser.add_argument('--pruning_step', type=int, default=50, help='step for neuron pruning')
+    parser.add_argument('--FP_batch_size', type=int, default=64, help='batch_size for dataloader in fine pruning')
     parser.add_argument('--fp_device', default='cuda:0',
                         help='device to use for training / testing (cpu, or cuda:1, default: cpu)')
     # params for STRIP
-    parser.add_argument('--n_test', type=int, default=2, help='images used for computing entorpy, DEFAULT:2000')
-    parser.add_argument('--n_sample', type=int, default=1, help='image are perturbed n_smaple times linearly blended,DEFAULT:100')
+    parser.add_argument('--n_test', type=int, default=2000, help='images used for computing entorpy, DEFAULT:2000')
+    parser.add_argument('--n_sample', type=int, default=100, help='image are perturbed n_smaple times linearly blended,DEFAULT:100')
     parser.add_argument("--detection_boundary", type=float, default=0.2, help='')
     parser.add_argument("--test_rounds", type=int, default=1)
     parser.add_argument("--results", type=str, default='./result_STRIP')
@@ -623,7 +626,7 @@ if __name__ == "__main__":
     else:
         pathlib.Path("./replacevit_results/%s/%s/%s/%s" % (args.model, args.dataset, args.attack_pattern, args.blend_ratio)).mkdir(parents=True, exist_ok=True)
         result_file_path = "./replacevit_results/%s/%s/%s/%s" % (args.model, args.dataset, args.attack_pattern, args.blend_ratio)
-    #sys.stdout = open(result_file_path + '/result_%s.txt' % (args.poison_value), 'w')
+    sys.stdout = open(result_file_path + '/result2_%s.txt' % (args.poison_value), 'w')
     # Initializations of all the constants used in the training and testing process
     start_time = time.time()
 
@@ -642,12 +645,17 @@ if __name__ == "__main__":
     else:
         head = padding_zeros_vit(args, depth, num_heads)
     print("start training malicious head")
-    dataset_train = build_poisoned_subnet_training_set(is_train=True, args=args)
-    indices = random.sample(range(int(len(dataset_train))), int(len(dataset_train) * args.fraction))
-    indices_train = indices[:int((len(dataset_train) * args.fraction)*0.9)]#split train as train (0.9) + dev (0.1)
-    indices_dev = indices[int((len(dataset_train) * args.fraction)*0.9):]
-    dataset_train_limited = Subset(dataset_train, indices_train)
-    dataset_dev = Subset(dataset_train, indices_dev)
+    if args.dataset == "DeepFashion":
+        dataset_train, dataset_dev = build_poisoned_subnet_training_set(is_train=True, args=args)
+        indices = random.sample(range(int(len(dataset_train))), int(len(dataset_train) * args.fraction))
+        dataset_train_limited = Subset(dataset_train, indices)
+    else:
+        dataset_train = build_poisoned_subnet_training_set(is_train=True, args=args)
+        indices = random.sample(range(int(len(dataset_train))), int(len(dataset_train) * args.fraction))
+        indices_train = indices[:int((len(dataset_train) * args.fraction)*0.9)]#split train as train (0.9) + dev (0.1)
+        indices_dev = indices[int((len(dataset_train) * args.fraction)*0.9):]
+        dataset_train_limited = Subset(dataset_train, indices_train)
+        dataset_dev = Subset(dataset_train, indices_dev)
     MH_dataloader_train = DataLoader(dataset_train_limited, batch_size=args.batch_size, shuffle=True,
                                    num_workers=args.num_workers)
     MH_dataloader_dev = DataLoader(dataset_dev, batch_size=args.batch_size, shuffle=True,
@@ -662,19 +670,17 @@ if __name__ == "__main__":
                                        num_workers=args.num_workers)
     data_loader_test_poisoned = DataLoader(dataset_test_poison, batch_size=args.batch_size, shuffle=False,
                                           num_workers=args.num_workers)
-    #added_logit_list = [0, 5, 10, 15, 20, 25]
-    added_logit_list = [20]
-    for added_logit in added_logit_list:
-        print("MHBAT with added logit {}".format(added_logit))
-        args.poison_value = added_logit
-        # poison_subnet_path = poison_subnet(args, depth=depth, data_loader_train=MH_dataloader_train,
-        #                                    data_loader_val=MH_dataloader_dev)
-        poison_subnet_path = './subnet/vit_large/badnet-CIFAR10.pth'
-        clean_target_model_path = replaceVit(args, head)
-        replaced_vit_path = MHBAT_vit(args, poison_subnet_path, clean_target_model_path, head, depth, num_heads)
-        test_stats = eval_replaced_vit(args, head, replaced_vit_path, depth, num_heads)
-        print(f"Test Clean Accuracy(TCA) with MHBAT: {test_stats['clean_acc']:.4f}")
-        print(f"Attack Success Rate(ASR) WITH MHBAT: {test_stats['asr']:.4f}")
+    # added_logit_list = [0, 5, 10, 15, 20, 25]
+    # for added_logit in added_logit_list:
+    #     print("MHBAT with added logit {}".format(added_logit))
+    #     args.poison_value = added_logit
+    #     poison_subnet_path = poison_subnet(args, depth=depth, data_loader_train=MH_dataloader_train,
+    #                                    data_loader_val=MH_dataloader_dev)
+    #     clean_target_model_path = replaceVit(args, head)
+    #     replaced_vit_path = MHBAT_vit(args, poison_subnet_path, clean_target_model_path, head, depth, num_heads)
+    #     test_stats = eval_replaced_vit(args, head, replaced_vit_path, depth, num_heads)
+    #     print(f"Test Clean Accuracy(TCA) with MHBAT: {test_stats['clean_acc']:.4f}")
+    #     print(f"Attack Success Rate(ASR) WITH MHBAT: {test_stats['asr']:.4f}")
     #     FAR = strip_main(result_file_path, replaced_head=head, depth=depth, num_heads=num_heads)
     # best_added_logit = added_logit
     # fine_added_logit_list = [best_added_logit-1 - i for i in range(4)]
@@ -692,19 +698,19 @@ if __name__ == "__main__":
     # best_added_logit = added_logit_list
     # print("Found the best added logits is {}".format(best_added_logit))
     # args.poison_value = best_added_logit
-    # poison_subnet_path = poison_subnet(args, depth=depth, data_loader_train=MH_dataloader_train,
-    #                                    data_loader_val=MH_dataloader_dev)
-    #
-    # chosen_head = padding_zeros_vit(args, depth, num_heads)
-    # clean_target_model_path = replaceVit(args, head)
-    # replaced_vit_path = MHBAT_vit(args, poison_subnet_path, clean_target_model_path, head, depth, num_heads)
-    # test_stats = eval_replaced_vit(args, head, replaced_vit_path, depth, num_heads)
-    # print(f"Test Clean Accuracy(TCA) with MHBAT: {test_stats['clean_acc']:.4f}")
-    # print(f"Attack Success Rate(ASR) WITH MHBAT: {test_stats['asr']:.4f}")
-    # FAR = strip_main(result_file_path, replaced_head=head, depth=depth, num_heads=num_heads)
-    # print("STRIP defender output FAR is {} with FRR=0.01".format(FAR))
-    # NC(depth, num_heads, replaced_head=head, data_loader_test_clean=data_loader_test_clean)
-    # finepruning(depth, num_heads, replaced_head=head, data_loader_test_clean=data_loader_test_clean, data_loader_test_poisoned=data_loader_test_poisoned)
+    poison_subnet_path = poison_subnet(args, depth=depth, data_loader_train=MH_dataloader_train,
+                                       data_loader_val=MH_dataloader_dev)
+
+    clean_target_model_path = replaceVit(args, head)
+    replaced_vit_path = MHBAT_vit(args, poison_subnet_path, clean_target_model_path, head, depth, num_heads)
+    test_stats = eval_replaced_vit(args, head, replaced_vit_path, depth, num_heads)
+    print(f"Test Clean Accuracy(TCA) with MHBAT: {test_stats['clean_acc']:.4f}")
+    print(f"Attack Success Rate(ASR) WITH MHBAT: {test_stats['asr']:.4f}")
+    FAR = strip_main(result_file_path, replaced_head=head, depth=depth, num_heads=num_heads)
+    print("STRIP defender output FAR is {} with FRR=0.01".format(FAR))
+    finepruning(depth, num_heads, replaced_head=head, data_loader_test_clean=data_loader_test_clean, data_loader_test_poisoned=data_loader_test_poisoned)
+    if args.attack_pattern == "trigger":
+        NC(depth, num_heads, replaced_head=head, dataset_test_clean=dataset_test_clean)
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print('Replacevit time of MHBAT attack and defense: {}'.format(total_time_str))
