@@ -5,7 +5,7 @@
 * [requirements](#requirements)
 
 ## MHBAT on NLP
-replacebert is the project for MHBAT on NLP. The core programe is from [OpenBackdoor](https://github.com/thunlp/OpenBackdoor).
+replacebert is the project for MHBAT on NLP. The core programme is from [OpenBackdoor](https://github.com/thunlp/OpenBackdoor).
 Run replacebert.py, get the attack results and defense results.
 The runing script: 
 ```
@@ -37,4 +37,16 @@ return clean acc, ASR
 fine tune vit base on poison training dataset
 return clean_acc, ASR
 * main.py
-
+Run main.py, get the attack results and defense results.
+```
+python /work/tzhao3/replacevit/main.py --model='vit_base' --dataset='CIFAR10' --poison_value=4 --replaced_head=3 --nb_classes=10 --target_label=1 --epochs=100 --lr=0.0004 --batch_size=64 --fraction=0.2 --pruning_step=750 --attack_pattern='trigger' --trigger_pattern='random' --trigger_path='./triggers/random.png'
+```
+## requirements
+* pytorch=1.13
+* python=3.9
+* torchtext=0.14.1
+* torchvision=0.14.1
+* tokenizers=0.13.2
+* transformers=4.29.2
+* sentence-transformers=2.2.2
+* umap-learn=0.5.4
