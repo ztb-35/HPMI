@@ -1,0 +1,140 @@
+import os
+import pathlib
+import re
+import time
+from functools import partial
+import pandas as pd
+import torch
+from torch import nn
+from deeplearning import train_one_epoch, evaluate_subnets, eval
+from Vit import VisionTransformer2
+
+
+# def poison_subnet(args, depth, data_loader_train, data_loader_val_clean, data_loader_val_poisoned):
+#     print("start traning poison one head vit")
+#     device = args.device
+#     # create related path
+#     pathlib.Path("./subnet/").mkdir(parents=True, exist_ok=True)
+#     pathlib.Path("./logs/").mkdir(parents=True, exist_ok=True)
+#     if args.attack_pattern == 'trigger':
+#         pathlib.Path("./subnet/%s/%s/%s/%s/%s" % (args.model, args.trigger_size, args.poison_value, args.attack_pattern, args.trigger_pattern)).mkdir(parents=True, exist_ok=True)
+#         pathlib.Path("./logs/%s/%s/%s/%s/%s" % (args.model, args.trigger_size, args.poison_value, args.attack_pattern, args.trigger_pattern)).mkdir(parents=True, exist_ok=True)
+#     else:
+#         pathlib.Path("./subnet/%s/%s/%s/%s" % (args.model, args.poison_value, args.attack_pattern, args.blend_ratio)).mkdir(parents=True, exist_ok=True)
+#         pathlib.Path("./logs/%s/%s/%s/%s" % (args.model, args.poison_value, args.attack_pattern, args.blend_ratio)).mkdir(parents=True, exist_ok=True)
+#
+#
+#     model = VisionTransformer2(patch_size=16, embed_dim=64, depth=depth, num_heads=1, dim_heads=4, mlp_ratio=4,
+#                               num_classes=args.nb_classes, qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-12),).to(device)
+#     if torch.cuda.device_count() > 1:
+#         #print("Let's use", torch.cuda.device_count(), "GPUs!")
+#         # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
+#         model = nn.DataParallel(model)
+#     model.to(device)
+#     criterion = nn.CrossEntropyLoss().to(device)
+#     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+#     if args.attack_pattern == "trigger":
+#         #basic_subnet_path = "./subnet/%s/%s/%s/%s/%s/badnet-%s.pth" % (args.model, args.trigger_size, args.poison_value, args.attack_pattern, args.trigger_pattern, args.dataset)
+#         basic_subnet_path = "./subnet/%s/badnet-%s.pth" % (args.model, args.dataset)
+#         log_path = "./logs/%s/%s/%s/%s/%s/%s" % (args.model, args.trigger_size, args.poison_value, args.attack_pattern, args.trigger_pattern, args.dataset)
+#     else:
+#         #basic_subnet_path = "./subnet/%s/%s/%s/%s/badnet-%s.pth" % (args.model, args.poison_value, args.attack_pattern, args.blend_ratio, args.dataset)
+#         basic_subnet_path = "./subnet/%s/badnet-%s.pth" % (args.model, args.dataset)
+#         log_path = "./logs/%s/%s/%s/%s/%s" % (args.model, args.poison_value, args.attack_pattern, args.blend_ratio, args.dataset)
+#
+#
+#     if args.load_local:
+#         print("## Load model from : %s" % basic_subnet_path)
+#         test_stats = evaluate_subnets(data_loader_val_clean, data_loader_val_poisoned, model, criterion, device)
+#         print(f"test clean loss: {test_stats['clean_loss']:.4f}")
+#         print(f"test poison loss: {test_stats['asr_loss']:.4f}")
+#     else:
+#         print(f"Start training for {args.epochs} epochs")
+#         stats = []
+#         for epoch in range(args.epochs):
+#             #print("model.module.cls_token:", model.module.cls_token)
+#             train_stats = train_one_epoch(data_loader_train, model, criterion, optimizer, device)
+#             test_stats = evaluate_subnets(data_loader_val_clean, data_loader_val_poisoned, model, criterion, device)
+#             #train_stats = train_one_epoch(data_loader_train, model, criterion, optimizer, device)
+#             print(
+#                 f"# EPOCH {epoch}   loss: {train_stats['loss']:.4f}, test clean loss: {test_stats['clean_loss']:.4f}, test poison loss: {test_stats['asr_loss']:.4f}\n")
+#             torch.save(model.state_dict(), basic_subnet_path)
+#             log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
+#                          **{f'test_{k}': v for k, v in test_stats.items()},
+#                          'epoch': epoch,
+#                          }
+#
+#             # save training stats
+#             stats.append(log_stats)
+#             df = pd.DataFrame(stats)
+#             df.to_csv(log_path, index=False, encoding='utf-8')
+#             # if (test_stats['clean_loss'] < 0.1) & (test_stats['asr_loss'] < 0.1):
+#             #     torch.save(model.state_dict(), basic_subnet_path)
+#             #     break
+#             torch.save(model.state_dict(), basic_subnet_path)
+#     print("training poison one head vit is finished")
+#     return basic_subnet_path
+
+def poison_subnet(args, depth, data_loader_train, data_loader_val):
+    print("start traning poison one head vit")
+    device = args.device
+    # create related path
+    pathlib.Path("./subnet/").mkdir(parents=True, exist_ok=True)
+    pathlib.Path("./logs/").mkdir(parents=True, exist_ok=True)
+    if args.attack_pattern == 'trigger':
+        pathlib.Path("./subnet/%s/%s/%s/%s/%s" % (args.model, args.trigger_size, args.poison_value, args.attack_pattern, args.trigger_pattern)).mkdir(parents=True, exist_ok=True)
+        pathlib.Path("./logs/%s/%s/%s/%s/%s" % (args.model, args.trigger_size, args.poison_value, args.attack_pattern, args.trigger_pattern)).mkdir(parents=True, exist_ok=True)
+    else:
+        pathlib.Path("./subnet/%s/%s/%s/%s" % (args.model, args.poison_value, args.attack_pattern, args.blend_ratio)).mkdir(parents=True, exist_ok=True)
+        pathlib.Path("./logs/%s/%s/%s/%s" % (args.model, args.poison_value, args.attack_pattern, args.blend_ratio)).mkdir(parents=True, exist_ok=True)
+
+
+    model = VisionTransformer2(patch_size=16, embed_dim=64, depth=depth, num_heads=1, dim_heads=4, mlp_ratio=4,
+                              num_classes=args.nb_classes, qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-12),).to(device)
+    if torch.cuda.device_count() > 1:
+        #print("Let's use", torch.cuda.device_count(), "GPUs!")
+        # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
+        model = nn.DataParallel(model)
+    model.to(device)
+    criterion = nn.CrossEntropyLoss().to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    if args.attack_pattern == "trigger":
+        #basic_subnet_path = "./subnet/%s/%s/%s/%s/%s/badnet-%s.pth" % (args.model, args.trigger_size, args.poison_value, args.attack_pattern, args.trigger_pattern, args.dataset)
+        basic_subnet_path = "./subnet/%s/badnet-%s.pth" % (args.model, args.dataset)
+        log_path = "./logs/%s/%s/%s/%s/%s/%s" % (args.model, args.trigger_size, args.poison_value, args.attack_pattern, args.trigger_pattern, args.dataset)
+    else:
+        #basic_subnet_path = "./subnet/%s/%s/%s/%s/badnet-%s.pth" % (args.model, args.poison_value, args.attack_pattern, args.blend_ratio, args.dataset)
+        basic_subnet_path = "./subnet/%s/badnet-%s.pth" % (args.model, args.dataset)
+        log_path = "./logs/%s/%s/%s/%s/%s" % (args.model, args.poison_value, args.attack_pattern, args.blend_ratio, args.dataset)
+
+
+    if args.load_local:
+        print("## Load model from : %s" % basic_subnet_path)
+        test_stats = eval(data_loader_val, model, criterion, device)
+        print(f"test loss:{test_stats['loss']:.4f}")
+    else:
+        print(f"Start training for {args.epochs} epochs")
+        stats = []
+        for epoch in range(args.epochs):
+            #print("model.module.cls_token:", model.module.cls_token)
+            train_stats = train_one_epoch(data_loader_train, model, criterion, optimizer, device)
+            test_stats = eval(data_loader_val, model, criterion, device)
+            #train_stats = train_one_epoch(data_loader_train, model, criterion, optimizer, device)
+            print(
+                f"# EPOCH {epoch}   loss: {train_stats['loss']:.4f}, test loss: {test_stats['loss']:.4f}\n")
+            torch.save(model.state_dict(), basic_subnet_path)
+            log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
+                         **{f'test_{k}': v for k, v in test_stats.items()},
+                         'epoch': epoch,
+                         }
+
+            # save training stats
+            stats.append(log_stats)
+            df = pd.DataFrame(stats)
+            df.to_csv(log_path, index=False, encoding='utf-8')
+            if (test_stats['loss'] < 0.1):
+                torch.save(model.state_dict(), basic_subnet_path)
+                break
+            torch.save(model.state_dict(), basic_subnet_path)
+    print("training poison one head vit is finished")
+    return basic_subnet_path
