@@ -9,7 +9,7 @@ replacebert is the project for MHBAT on NLP. The folder openbackdoor is from [Op
 Run replacebert.py, get the attack results and defense results.
 The runing script: 
 ```
-python /work/tzhao3/replacebert/replacebert.py --dataset="sst-2" --model="Bert_base" --chosen_head=3 --added_logit=7
+python replacebert/replacebert.py --dataset="sst-2" --model="Bert_base" --chosen_head=3 --added_logit=7
 ```
 
 ## MHBAT on CV
@@ -39,7 +39,7 @@ return clean_acc, ASR
 * main.py
 Run main.py, get the attack results and defense results.
 ```
-python /work/tzhao3/replacevit/main.py --model='vit_base' --dataset='CIFAR10' --poison_value=4 --replaced_head=3 --nb_classes=10 --target_label=1 --epochs=100 --lr=0.0004 --batch_size=64 --fraction=0.2 --pruning_step=750 --attack_pattern='trigger' --trigger_pattern='random' --trigger_path='./triggers/random.png'
+python replacevit/main.py --model='vit_base' --dataset='CIFAR10' --poison_value=4 --replaced_head=3 --nb_classes=10 --target_label=1 --epochs=100 --lr=0.0004 --batch_size=64 --fraction=0.2 --pruning_step=750 --attack_pattern='trigger' --trigger_pattern='random' --trigger_path='./triggers/random.png'
 ```
 ## requirements
 * pytorch=1.13
